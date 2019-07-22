@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -21,11 +21,12 @@
 #pragma once
 
 #include "FaceFXAsset.h"
-#include "FaceFxEditorTools.h"
-#include "Include/Slate/FaceFxStyle.h"
-
+#include "FaceFXEditorTools.h"
 #include "IAssetTypeActions.h"
+#include "Factories/Factory.h"
 #include "FaceFXActorFactory.generated.h"
+
+class FFeedbackContext;
 
 UCLASS(hidecategories=Object)
 class UFaceFXActorFactory : public UFactory
@@ -33,16 +34,12 @@ class UFaceFXActorFactory : public UFactory
 	GENERATED_UCLASS_BODY()
 
 	//UFactory
-	virtual UObject* FactoryCreateNew(UClass* InClass,UObject* InParent,FName InName,EObjectFlags Flags,UObject* Context,FFeedbackContext* Warn) override;
+	virtual UObject* FactoryCreateNew(UClass* InClass, UObject* InParent, FName InName, EObjectFlags Flags, UObject* Context, FFeedbackContext* Warn) override;
 	virtual uint32 GetMenuCategories() const override
 	{
 		return FFaceFXEditorTools::AssetCategory;
 	}
-
-	virtual FName GetNewAssetThumbnailOverride() const override
-	{
-		return FFaceFXStyle::GetBrushIdFxActor();
-	}
+	virtual FName GetNewAssetThumbnailOverride() const override;
 	//~UFactory
 
 	/**
@@ -56,8 +53,8 @@ class UFaceFXActorFactory : public UFactory
 	* @returns The new object or nullptr if not instantiated
 	*/
 	static UObject* CreateNew(UClass* Class, UObject* InParent, const FName& Name, EObjectFlags Flags, const FCompilationBeforeDeletionDelegate& BeforeDeletionCallback = FCompilationBeforeDeletionDelegate(), FString FaceFXAsset = "");
-	
-	/** 
+
+	/**
 	* Handles the case when a UFaceFXActor asset was created and we want to ask the user to import additional animations
 	* @param Asset the asset that got created
 	* @param CompilationFolder The compilation folder

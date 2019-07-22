@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -18,20 +18,24 @@
   SOFTWARE.
 *******************************************************************************/
 
+#include "Factories/FaceFXActorFactory.h"
 #include "FaceFXEditor.h"
 #include "FaceFX.h"
-#include "Factories/FaceFXActorFactory.h"
 #include "Factories/FaceFXAnimFactory.h"
-
+#include "Include/Slate/FaceFXStyle.h"
+#include "Include/Slate/FaceFXResultWidget.h"
+#include "FaceFXEditorTools.h"
+#include "FaceFXEditorConfig.h"
 #include "AssetToolsModule.h"
 #include "EditorStyleSet.h"
-#include "IMainFrameModule.h"
+#include "Interfaces/IMainFrameModule.h"
 #include "IDesktopPlatform.h"
 #include "DesktopPlatformModule.h"
 #include "ObjectTools.h"
 #include "ISourceControlModule.h"
 #include "Editor.h"
-#include "Include/Slate/FaceFXResultWidget.h"
+#include "Misc/MessageDialog.h"
+
 
 #define LOCTEXT_NAMESPACE "FaceFX"
 
@@ -46,6 +50,11 @@ UFaceFXActorFactory::UFaceFXActorFactory(const class FObjectInitializer& PCIP)
 	Formats.Add(TEXT("facefx;FaceFX Asset"));
 }
 
+FName UFaceFXActorFactory::GetNewAssetThumbnailOverride() const
+{
+	return FFaceFXStyle::GetBrushIdFxActor();
+}
+
 UObject* UFaceFXActorFactory::FactoryCreateNew(UClass* InClass, UObject* InParent, FName InName, EObjectFlags Flags, UObject* Context, FFeedbackContext* Warn)
 {
 	return CreateNew(InClass, InParent, InName, Flags, FCompilationBeforeDeletionDelegate::CreateStatic(&UFaceFXActorFactory::OnFxActorCompilationBeforeDelete), GetCurrentFilename());
@@ -53,7 +62,7 @@ UObject* UFaceFXActorFactory::FactoryCreateNew(UClass* InClass, UObject* InParen
 
 void UFaceFXActorFactory::OnFxActorCompilationBeforeDelete(UObject* Asset, const FString& CompilationFolder, bool LoadResult, FFaceFXImportResult& OutResultMessages)
 {
-	if(LoadResult && FFaceFXEditorTools::IsImportAnimationOnActorImport())
+	if(LoadResult && UFaceFXEditorConfig::Get().IsImportAnimationOnActorImport())
 	{
 		//generate proper factory
 		UFaceFXAnimFactory* Factory = NewObject<UFaceFXAnimFactory>(UFaceFXAnimFactory::StaticClass());
@@ -70,7 +79,7 @@ void UFaceFXActorFactory::HandleFaceFXActorCreated(UFaceFXActor* Asset, const FS
 {
 	check(Asset);
 
-	if(!FFaceFXEditorTools::IsImportAnimationOnActorImport())
+	if(!UFaceFXEditorConfig::Get().IsImportAnimationOnActorImport())
 	{
 		//animation import disabled
 		return;
@@ -78,40 +87,17 @@ void UFaceFXActorFactory::HandleFaceFXActorCreated(UFaceFXActor* Asset, const FS
 
 	//asset successfully loaded -> ask for importing Animations as well or not
 	TArray<FString> AnimGroups;
-	if(FFaceFXEditorTools::GetAnimationGroupsInFolder(CompilationFolder, EFaceFXTargetPlatform::PC, &AnimGroups))
+	if(FFaceFXEditorTools::GetAnimationGroupsInFolder(CompilationFolder, &AnimGroups) && AnimGroups.Num() > 0)
 	{
-		if(AnimGroups.Num() > 0)
+		IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
+
+		FString PackageName;
+		Asset->GetOutermost()->GetName(PackageName);
+
+		//import additional animations
+		for(const FString& Group : AnimGroups)
 		{
-			const FText Title = FText::Format(LOCTEXT("AutoImportAnimationTitle", "Import Animation Data [{0}]"), FText::FromString(Asset->GetName()));
-
-			//collect all groups
-			FString Groups;
-			for(auto& Group : AnimGroups)
-			{
-				Groups += Group + TEXT("\n");
-			}
-
-			FFormatNamedArguments Args;
-			Args.Add(TEXT("Groups"), FText::FromString(Groups));
-
-			//we have animations -> ask user if he wants to import and link those into new assets. One per group
-			const EAppReturnType::Type Result = FMessageDialog::Open(EAppMsgType::YesNo,
-				FText::Format(LOCTEXT("AutoImportAnimationMessage", "Do you want to automatically (re)import the existing animations for the following groups ?\n\nGroups:\n{Groups}"), Args),
-				&Title);
-
-			if(Result == EAppReturnType::Yes)
-			{
-				IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
-				
-				FString PackageName;
-				Asset->GetOutermost()->GetName(PackageName);
-
-				//import additional animations
-				for(const FString& Group : AnimGroups)
-				{
-					FFaceFXEditorTools::ReimportOrCreateAnimAssets(CompilationFolder, Group, PackageName, Asset, AssetTools, OutResultMessages, Factory);
-				}
-			}
+			FFaceFXEditorTools::ReimportOrCreateAnimAssets(CompilationFolder, Group, PackageName, Asset, AssetTools, OutResultMessages, Factory);
 		}
 	}
 }
@@ -181,7 +167,7 @@ UObject* UFaceFXActorFactory::CreateNew(UClass* Class, UObject* InParent, const 
 			//success
 			FFaceFXEditorTools::SavePackage(NewAsset->GetOutermost());
 		}
-						
+
 		GWarn->EndSlowTask();
 
 		FFaceFXResultWidget::Create(LOCTEXT("ShowCreateFxActorResultTitle", "Create FaceFX Asset Result"), ResultSet);

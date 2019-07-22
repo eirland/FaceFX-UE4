@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -21,18 +21,17 @@
 #pragma once
 
 #include "IAssetTypeActions.h"
-#include "Include/Slate/FaceFxStyle.h"
+#include "Factories/Factory.h"
 #include "FaceFXAnimFactory.generated.h"
+
+class FFeedbackContext;
 
 UCLASS(hidecategories=Object)
 class UFaceFXAnimFactory : public UFactory
 {
 	GENERATED_UCLASS_BODY()
 
-	virtual UObject* FactoryCreateNew(UClass* Class,UObject* InParent,FName Name,EObjectFlags Flags,UObject* Context,FFeedbackContext* Warn) override;
+	virtual UObject* FactoryCreateNew(UClass* Class, UObject* InParent, FName Name, EObjectFlags Flags, UObject* Context, FFeedbackContext* Warn) override;
 	virtual uint32 GetMenuCategories() const override;
-	virtual FName GetNewAssetThumbnailOverride() const override
-	{
-		return FFaceFXStyle::GetBrushIdFxAnim();
-	}
+	virtual FName GetNewAssetThumbnailOverride() const override;
 };

@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -26,8 +26,11 @@
 
 #include "AnimNode_BlendFaceFXAnimation.generated.h"
 
+struct FAnimInstanceProxy;
+enum class EFaceFXBlendMode : uint8;
+
 /** Anim graph node that blends in facial animation bone transforms into the pose */
-USTRUCT()
+USTRUCT(BlueprintType)
 struct FACEFX_API FAnimNode_BlendFaceFXAnimation : public FAnimNode_Base
 {
 	GENERATED_USTRUCT_BODY()
@@ -42,24 +45,22 @@ struct FACEFX_API FAnimNode_BlendFaceFXAnimation : public FAnimNode_Base
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=BlendMode, meta=(PinShownByDefault, UIMin=0.F, UIMax=1.F))
 	float Alpha;
 
-	/** Whether and how to modify the translation of this bone. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=BlendMode)
-	TEnumAsByte<EBoneModificationMode> TranslationMode;
+	/** Indicator if stripped name space bone mapping shall be skipped during bone matching phase in case a bone name was not found */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category=BoneMapping)
+	bool bSkipBoneMappingWithoutNS;
 
-	/** Whether and how to modify the translation of this bone. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=BlendMode)
-	TEnumAsByte<EBoneModificationMode> RotationMode;
-
-	/** Whether and how to modify the translation of this bone. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=BlendMode)
-	TEnumAsByte<EBoneModificationMode> ScaleMode;
+	// @todo What about the transitions where the node becomes active / inactive?
+	/** The maximum LOD setting under which this node is allowed to run. Defaults to all LOD settings. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Performance, meta = (DisplayName = "LOD Threshold"))
+	int32 LODThreshold;
 
 	// FAnimNode_Base interface
-	virtual void Initialize(const FAnimationInitializeContext& Context) override;
-	virtual void CacheBones(const FAnimationCacheBonesContext & Context) override;
-	virtual void Update(const FAnimationUpdateContext& Context) override;
-	virtual void Evaluate(FPoseContext& Output) override;
-	virtual void EvaluateComponentSpace(FComponentSpacePoseContext& Output) override;
+	virtual void Initialize_AnyThread(const FAnimationInitializeContext& Context) override;
+	virtual void CacheBones_AnyThread(const FAnimationCacheBonesContext & Context) override;
+	virtual void Update_AnyThread(const FAnimationUpdateContext& Context) override;
+	virtual void Evaluate_AnyThread(FPoseContext& Output) override;
+	virtual void EvaluateComponentSpace_AnyThread(FComponentSpacePoseContext& Output) override;
+	virtual int32 GetLODThreshold() const override { return LODThreshold; }
 	// End of FAnimNode_Base interface
 
 private:
@@ -67,10 +68,18 @@ private:
 	/** struct that holds a transform / boneidx mapping */
 	struct FBlendFacialAnimationEntry
 	{
-		FBlendFacialAnimationEntry(int32 InBoneIdx, int32 InTransformIdx) : BoneIdx(InBoneIdx), TransformIdx(InTransformIdx) {}
+		FBlendFacialAnimationEntry(int32 InBoneIdx, int32 InTransformIdx, const FTransform& InBoneRefPose) : BoneIdx(InBoneIdx), TransformIdx(InTransformIdx)
+		{
+			BoneRefPoseScale = InBoneRefPose.GetScale3D();
+			BoneRefPoseTranslation = InBoneRefPose.GetTranslation();
+			BoneRefPoseRotationInv = InBoneRefPose.GetRotation().Inverse();
+		}
 
 		int32 BoneIdx;
 		int32 TransformIdx;
+		FVector BoneRefPoseScale;
+		FVector BoneRefPoseTranslation;
+		FQuat BoneRefPoseRotationInv;
 	};
 
 	/** The bone indices where to copy the transforms into. Based on the bone names coming from the facefx character instance */
@@ -80,13 +89,15 @@ private:
 	* Try to load the FaceFX character data
 	* @param AnimInstance The anim graph instance to use
 	*/
-	void LoadFaceFXData(UAnimInstance* AnimInstance);
+	void LoadFaceFXData(FAnimInstanceProxy* AnimInstanceProxy);
 
 	/** The container where we put the current transforms into that are about to get blended. We always only use the very first entry */
 	TArray<FBoneTransform> TargetBlendTransform;
 
 	/** Indicator if the async loading process of the FaceFX character has completed. */
 	uint8 bFaceFXCharacterLoadingCompleted : 1;
+
+	EFaceFXBlendMode BlendMode;
 
 #if !UE_BUILD_SHIPPING
 	/** TODO: Remove again once engine issue have been localized */

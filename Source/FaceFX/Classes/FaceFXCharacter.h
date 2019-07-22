@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -22,19 +22,27 @@
 
 #include "FaceFXConfig.h"
 #include "FaceFXData.h"
+#include "FaceFXAnim.h"
+
 #include "Tickable.h"
 #include "FaceFXCharacter.generated.h"
 
-/** The delegate used for various FaceFX events */
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnFaceFXCharacterEventSignature, class UFaceFXCharacter*, Character, const struct FFaceFXAnimId&, AnimId);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnFaceFXCharacterAudioStartEventSignature, class UFaceFXCharacter*, Character, const struct FFaceFXAnimId&, AnimId, bool, IsAudioStarted, class UAudioComponent*, AudioComponentStartedOn);
-DECLARE_MULTICAST_DELEGATE_TwoParams(FOnFaceFXCharacterPlayAssetIncompatibleSignature, class UFaceFXCharacter* /*Character*/, const class UFaceFXAnim* /*Asset*/);
+struct IFaceFXAudio;
+class UFaceFXActor;
+class UFaceFXComponent;
+class UFaceFXAsset;
+class AActor;
 
 /** Class that represents a FaceFX character instance */
 UCLASS()
 class FACEFX_API UFaceFXCharacter : public UObject, public FTickableGameObject
 {
 	GENERATED_UCLASS_BODY()
+
+	/** The delegate used for various FaceFX events */
+	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnFaceFXCharacterEventSignature, UFaceFXCharacter* /*Character*/, const FFaceFXAnimId& /*AnimId*/);
+	DECLARE_MULTICAST_DELEGATE_FourParams(FOnFaceFXCharacterAudioStartEventSignature, UFaceFXCharacter* /*Character*/, const FFaceFXAnimId& /*AnimId*/, bool /*IsAudioStarted*/, UActorComponent* /*AudioComponentStartedOn*/);
+	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnFaceFXCharacterPlayAssetIncompatibleSignature, UFaceFXCharacter* /*Character*/, const UFaceFXAnim* /*Asset*/);
 
 public:
 
@@ -83,7 +91,7 @@ public:
 	* @param Loop True for when the animation shall loop, else false
 	* @returns True if succeeded, else false
 	*/
-	bool Play(const class UFaceFXAnim* Animation, bool Loop = false);
+	bool Play(const UFaceFXAnim* Animation, bool Loop = false);
 
 	/**
 	* Resumes the playback of the facial animation
@@ -93,15 +101,17 @@ public:
 
 	/**
 	* Pauses the playback of the facial animation
+	* @param fadeOut Indicator if the audio playback shall fade out quickly instead of stopping
 	* @returns True if succeeded, else false
 	*/
-	bool Pause();
+	bool Pause(bool fadeOut = false);
 
 	/**
 	* Stops the playback of this facial animation
+	* @param enforceStop Indicator if the stop is enforced no matter of current state
 	* @returns True if succeeded, else false
 	*/
-	bool Stop();
+	bool Stop(bool enforceStop = false);
 
 	/**
 	* Restarts the current animation
@@ -112,7 +122,7 @@ public:
 		return JumpTo(0.F);
 	}
 
-	/** 
+	/**
 	* Jumps to a given position within the facial animation playback
 	* @param Position The target position to jump to (in seconds). Ranges from 0 to animation duration
 	* @returns True if succeeded, else false
@@ -125,10 +135,12 @@ public:
 	/**
 	* Loads the character data from the given data set
 	* @param Dataset The data set to load from
+	* @param IsCompensateForForceFrontXAxis Indicator that compensates for the Force Front XAxis setting when importing FBX files
 	* @param IsDisabledMorphTargets Indicator if the use of available morph targets shall be disabled
+	* @param IsDisableMaterialParameters Indicator if the use of material parameters shall be disabled
 	* @returns True if succeeded, else false
 	*/
-	bool Load(const class UFaceFXActor* Dataset, bool IsDisabledMorphTargets);
+	bool Load(const UFaceFXActor* Dataset, bool IsCompensateForForceFrontXAxis, bool IsDisabledMorphTargets, bool IsDisableMaterialParameters);
 
 	/**
 	* Gets the indicator if this character have been loaded
@@ -140,6 +152,18 @@ public:
 	}
 
 	/**
+	* Gets the indicator if the character has the given facial animation active right now (playing or not)
+	* @param AnimId The animation ID we check for
+	* @returns True if the given animation is active, else false
+	*/
+	inline bool IsAnimationActive(const FFaceFXAnimId& AnimId) const
+	{
+		//look for the animation by id. If no group is set for the given AnimId, ignore group during comparison
+		const FFaceFXAnimId CurrentAnimId = GetCurrentAnimationId();
+		return ((!AnimId.Group.IsNone() && CurrentAnimId == AnimId) || AnimId.Name == CurrentAnimId.Name);
+	}
+
+	/**
 	* Gets the indicator if the character is playing a facial animation right now
 	* @returns True if playing, else false
 	*/
@@ -147,6 +171,23 @@ public:
 	{
 		return AnimPlaybackState == EPlaybackState::Playing;
 	}
+
+	/**
+	* Gets the indicator if the character is playing the given facial animation right now
+	* @param AnimId The animation ID we check for playback
+	* @returns True if playing the given animation, else false
+	*/
+	inline bool IsPlaying(const FFaceFXAnimId& AnimId) const
+	{
+		return IsPlaying() && IsAnimationActive(AnimId);
+	}
+
+	/**
+	* Gets the indicator if the character is playing the given facial animation right now
+	* @param Animation The animation we check for playback
+	* @returns True if playing the given animation, else false
+	*/
+	bool IsPlaying(const UFaceFXAnim* Animation) const;
 
 	/**
 	* Gets the indicator if the character is playing a facial animation right now or if one is paused
@@ -164,8 +205,7 @@ public:
 	*/
 	inline bool IsPlayingOrPaused(const FFaceFXAnimId& AnimId) const
 	{
-		//look for the animation by id. If no group is set for the given AnimId, ignore group during comparison
-		return IsPlayingOrPaused() && ((!AnimId.Group.IsNone() && CurrentAnim == AnimId) || AnimId.Name == CurrentAnim.Name);
+		return IsPlayingOrPaused() && IsAnimationActive(AnimId);
 	}
 
 	/**
@@ -173,33 +213,15 @@ public:
 	* @param Animation The animation to look for
 	* @returns True if such an animation is currently playing, else false
 	*/
-	bool IsPlayingOrPaused(const class UFaceFXAnim* Animation) const;
+	bool IsPlayingOrPaused(const UFaceFXAnim* Animation) const;
 
-	/** 
+	/**
 	* Gets the indicator if this character is currently pausing a facial animation
 	* @returns True If the character is having a paused facial animation, else false
 	*/
 	inline bool IsPaused() const
 	{
 		return AnimPlaybackState == EPlaybackState::Paused && CurrentAnimHandle;
-	}
-
-	/**
-	* Gets the indicator if the character is playing a audio right now
-	* @returns True if playing, else false
-	*/
-	inline bool IsPlayingAudio() const
-	{
-		return AudioPlaybackState == EPlaybackState::Playing;
-	}
-
-	/** 
-	* Gets the indicator if the audio is currently playing or paused
-	* @returns True if paused or playing, else false
-	*/
-	inline bool IsPlayingOrPausedAudio() const
-	{
-		return AudioPlaybackState != EPlaybackState::Stopped;
 	}
 
 	/**
@@ -211,29 +233,55 @@ public:
 		return bIsLooping;
 	}
 
-	/** 
+	/**
 	* Checks if the character FaceFX actor handle can play the given animation
 	* @param Animation The animation to check
 	* @returns True if it can play the animation, else false
 	*/
 	bool IsCanPlay(const UFaceFXAnim* Animation) const;
 
-	/** 
+	/**
+	* Gets the indicator if the character is playing a audio right now
+	* @returns True if playing, else false
+	*/
+	bool IsPlayingAudio() const;
+
+	/**
+	* Gets the indicator if the audio is currently playing or paused
+	* @returns True if paused or playing, else false
+	*/
+	bool IsPlayingOrPausedAudio() const;
+
+	/**
 	* Gets the indicator if the audio shall be played automatically if available
 	* @returns True if auto play is enabled, else false
 	*/
-	inline bool IsAutoPlaySound() const
-	{
-		return bIsAutoPlaySound;
-	}
+	bool IsAutoPlaySound() const;
 
-	/** 
+	/**
 	* Sets the indicator if the audio shall be played automatically if available
 	* @param isAutoPlaySound The new indicator value
 	*/
-	inline void SetAutoPlaySound(bool isAutoPlaySound)
+	void SetAutoPlaySound(bool isAutoPlaySound);
+
+	/**
+	* Sets the audio component for this character
+	* @param Component The new audio component
+	*/
+	void SetAudioComponent(UActorComponent* Component);
+
+	/** 
+	* Gets the audio player associated with this character 
+	* @returns The audio player
+	*/
+	inline IFaceFXAudio* GetAudioPlayer() const
 	{
-		bIsAutoPlaySound = isAutoPlaySound;
+		return AudioPlayer.Get();
+	}
+
+	inline EFaceFXBlendMode GetBlendMode() const
+	{
+		return BlendMode;
 	}
 
 	/**
@@ -276,24 +324,25 @@ public:
 		return FaceFXActor;
 	}
 
-	/** 
-	* Sets the audio component for this character
-	* @param Component The new audio component
+	/**
+	* Gets the owning actor
+	* @returns The actor or nullptr if not belonging to one
 	*/
-	inline void SetAudioComponent(class UAudioComponent* Component)
-	{
-		AudioComponent = Component;
-	}
+	AActor* GetOwningActor() const;
 
 	//FTickableGameObject
 	virtual void Tick(float DeltaTime) override;
 	virtual bool IsTickable() const override;
+	virtual bool IsTickableInEditor() const override
+	{
+		return true;
+	}
 	virtual TStatId GetStatId() const override;
 	//~FTickableGameObject
 
 #if FACEFX_USEANIMATIONLINKAGE
 
-	/** 
+	/**
 	* Gets the start and end time of a given animation
 	* @param Actor Contextual actor to fetch the FaceFX character from
 	* @param AnimId The animation id to fetch the bounds for
@@ -303,16 +352,29 @@ public:
 	*/
 	static bool GetAnimationBoundsById(const AActor* Actor, const FFaceFXAnimId& AnimId, float& OutStart, float& OutEnd);
 
-	/** 
+	/**
+	* Gets the start and end time of a given animation
+	* @param FaceFXActor The FaceFX Actor to retrieve the animation from
+	* @param AnimId The animation id to fetch the bounds for
+	* @param OutStart The start time if call succeeded
+	* @param OutEnd The end time if call succeeded
+	* @returns True if succeeded, else false
+	*/
+	static bool GetAnimationBoundsById(const UFaceFXActor* FaceFXActor, const FFaceFXAnimId& AnimId, float& OutStart, float& OutEnd);
+
+	/**
 	* Gets the start and end time of a given animation
 	* @param AnimId The animation id to fetch the bounds for
 	* @param OutStart The start time if call succeeded
 	* @param OutEnd The end time if call succeeded
 	* @returns True if succeeded, else false
 	*/
-	bool GetAnimationBoundsById(const FFaceFXAnimId& AnimId, float& OutStart, float& OutEnd) const;
+	inline bool GetAnimationBoundsById(const FFaceFXAnimId& AnimId, float& OutStart, float& OutEnd) const
+	{
+		return GetAnimationBoundsById(FaceFXActor, AnimId, OutStart, OutEnd);
+	}
 
-	/** 
+	/**
 	* Gets the list of animation ids of all animations that are currently linked to this character
 	* @param OutAnimIds The resulting list of animation ids
 	* @returns True if call succeeded, else false
@@ -320,75 +382,43 @@ public:
 	bool GetAllLinkedAnimationIds(TArray<FFaceFXAnimId>& OutAnimIds) const;
 #endif //FACEFX_USEANIMATIONLINKAGE
 
-	/** 
-	* Gets the start and end time of a given animation
-	* @param Animation The animation to fetch the bounds for
-	* @param OutStart The start time if call succeeded
-	* @param OutEnd The end time if call succeeded
-	* @returns True if succeeded, else false
-	*/
-	static bool GetAnimationBounds(const class UFaceFXAnim* Animation, float& OutStart, float& OutEnd);
-	
 	/** Event that triggers whenever an asset was tried to get played which is incompatible to the FaceFX actor handle */
 	static FOnFaceFXCharacterPlayAssetIncompatibleSignature OnFaceFXCharacterPlayAssetIncompatible;
 
 private:
 
-	/** The different playback states */
-	enum class EPlaybackState
-	{
-		Playing,
-		Paused,
-		Stopped
-	};
-
 	/**
 	* Gets the currently playing animation
 	* @returns The animation name
 	*/
-	inline const FFaceFXAnimId& GetCurrentAnimation() const
-	{
-		return CurrentAnim;
-	}
+	FFaceFXAnimId GetCurrentAnimationId() const;
 
-	/** 
+	/**
 	* Gets the skel mesh component that owns this FaceFX character
 	* @returns The owning skel mesh component or nullptr if not found
 	*/
-	class USkeletalMeshComponent* GetOwningSkelMeshComponent() const;
+	USkeletalMeshComponent* GetOwningSkelMeshComponent() const;
 
-	/** 
+	/**
 	* Gets the FaceFX component that owns this FaceFX character instance
 	* @returns The FaceFX component or nullptr if there is no or another owner of this FaceFX character instance
 	*/
-	class UFaceFXComponent* GetOwningFaceFXComponent() const;
+	UFaceFXComponent* GetOwningFaceFXComponent() const;
 
-	/** 
-	* Gets the owning actor
-	* @returns The actor or nullptr if not belonging to one
-	*/
-	class AActor* GetOwningActor() const;
-
-	/** 
-	* Gets the audio component assigned to this character. If not set the audio component will be looked up from the owning actors component list
-	* @returns The audio component or nullptr if not found
-	*/
-	class UAudioComponent* GetAudioComponent() const;
-
-	/** 
+	/**
 	* Checks if the character FaceFX actor handle can play the given animation handle
 	* @param AnimationHandle The animation handle to check
 	* @returns True if it can play the animation, else false
 	*/
 	bool IsCanPlay(struct ffx_anim_handle_t* AnimationHandle) const;
 
-	/** 
+	/**
 	* Gets the indicator if the audio start event was triggered within the current frame state
 	* @returns True if audio was started, else false
 	*/
 	bool IsAudioStarted();
 
-	/** 
+	/**
 	* Gets the start and end time of the current animation
 	* @param OutStart The start time if call succeeded
 	* @param OutEnd The end time if call succeeded
@@ -411,48 +441,6 @@ private:
 	*/
 	void UnloadCurrentAnim();
 
-	/** 
-	* Prepares the audio data if needed for the current animation 
-	* @param Animation The animation to prepare the audio for
-	*/
-	void PrepareAudio(const UFaceFXAnim* Animation);
-
-	/** 
-	* Plays the audio if available 
-	* @param OutAudioComp The audio component on which audio was started to play. Unchanged if function returns false
-	* @returns True if audio playback successfully started on the owning actors Audio component, else false
-	*/
-	inline bool PlayAudio(class UAudioComponent** OutAudioComp = nullptr)
-	{
-		return PlayAudio(0.F, OutAudioComp);
-	}
-
-	/** 
-	* Plays the audio if available 
-	* @param Position The position to start the audio at. Ranging from 0 to audio playback duration. Keep at 0 to start from the beginning. Will be clamped at 0
-	* @param OutAudioComp The audio component on which audio was started to play. Unchanged if function returns false
-	* @returns True if audio playback successfully started on the owning actors Audio component, else false
-	*/
-	bool PlayAudio(float Position = 0.F, class UAudioComponent** OutAudioComp = nullptr);
-
-	/** 
-	* Pausing the playback of the currently playing audio
-	* @returns True if succeeded, else false
-	*/
-	bool PauseAudio();
-
-	/** 
-	* Stops the playback of the currently playing audio
-	* @returns True if succeeded, else false
-	*/
-	bool StopAudio();
-
-	/** 
-	* Resumes the playback of the currently paused audio
-	* @returns True if succeeded, else false
-	*/
-	bool ResumeAudio();
-
 	/** Enforces a tick with a zero delta */
 	inline void EnforceZeroTick()
 	{
@@ -462,7 +450,7 @@ private:
 		Tick(0.F);
 	}
 
-	/** 
+	/**
 	* Performs ticks from 0 to Duration in small enough timesteps to find out the location where the audio was triggered
 	* @param Duration The duration until to tick to
 	* @param OutAudioStarted True if the audio was started until the duration was reached, else false
@@ -470,35 +458,50 @@ private:
 	*/
 	bool TickUntil(float Duration, bool& OutAudioStarted);
 
-	/** 
-	* Retrieves the morph targets for a skel mesh and creates FaceFX indices for the names 
+	/**
+	* Retrieves the morph targets for a skel mesh and creates FaceFX indices for the names
+	* @param Dataset The asset to fetch the ids from
 	* @returns True if setup succeeded, else false
 	*/
-	bool SetupMorphTargets();
-
+	bool SetupMorphTargets(const UFaceFXActor* Dataset);
+	
 	/** Processes the morph targets for the current frame state */
 	void ProcessMorphTargets();
 
-	/**
-	* Gets the latest internal facefx error message
-	* @returns The last error message
-	*/
-	static FString GetFaceFXError();
+	/** Resets the current morph target data */
+	inline void ResetMorphTargets()
+	{
+		MorphTargetNames.Empty();
+		MorphTargetTrackValues.Empty();
+	}
 
 	/**
-	* Loads a set of animation data
-	* @param AnimData The data to load the animation with
-	* @returns The FaceFX handle if succeeded, else nullptr
+	* Retrieves the material parameters for skel mesh materials and creates FaceFX indices for the names
+	* @param Dataset The asset to fetch the ids from
+	* @param IgnoredTracks The list of tracks to ignore
+	* @returns True if setup succeeded, else false
 	*/
-	static struct ffx_anim_handle_t* LoadAnimation(const struct FFaceFXAnimData& AnimData);
+	bool SetupMaterialParameters(const UFaceFXActor* Dataset, const TArray<FName>& IgnoredTracks);
+
+	/** Processes the material parameters for the current frame state */
+	void ProcessMaterialParameters();
+
+	/** Resets the current material parameter data */
+	inline void ResetMaterialParameters()
+	{
+		MaterialParameterNames.Empty();
+		MaterialParameterTrackValues.Empty();
+	}
+
+	/** Sets the material parameters of the owners skel mesh to their defaults */
+	void ResetMaterialParametersToDefaults();
 
 	/** The data set from where this character was loaded from */
-	UPROPERTY()
+	UPROPERTY(Transient)
 	const UFaceFXActor* FaceFXActor;
 
-	/** The audio component assigned to this character */
-	UPROPERTY()
-	class UAudioComponent* AudioComponent;
+	/** The audio player for this character */
+	TSharedPtr<IFaceFXAudio> AudioPlayer;
 
 	/** The associated actor handle */
 	struct ffx_actor_handle_t* ActorHandle;
@@ -530,6 +533,12 @@ private:
 	/** The track values buffer for the morph target processing */
 	TArray<ffx_track_value_t> MorphTargetTrackValues;
 
+	/** The list of material parameter names retrieved from the skel mesh during asset loading. The indices match the material parameter track values: MaterialParameterTrackValues */
+	TArray<FName> MaterialParameterNames;
+
+	/** The track values buffer for the material parameter processing */
+	TArray<ffx_track_value_t> MaterialParameterTrackValues;
+
 	/** The overall time progression */
 	float CurrentTime;
 
@@ -542,20 +551,15 @@ private:
 	/** The starting location of the currently playing animation */
 	float CurrentAnimStart;
 
-	/** The location at which we are right now on the audio playback (in seconds) */
-	float CurrentAudioProgress;
-
-	/** The id of the currently played animation */
-	FFaceFXAnimId CurrentAnim;
-
-	/** The current audio asset that was assigned to the current animation*/
-	TAssetPtr<class USoundWave> CurrentAnimSound;
+	/** The animation asset of the currently playing animation */
+	UPROPERTY(Transient)
+	const UFaceFXAnim* CurrentAnim;
 
 	/** The animation playback state */
 	EPlaybackState AnimPlaybackState;
 
-	/** The audio playback state */
-	EPlaybackState AudioPlaybackState;
+	/** Used blend mode. Either defined by global config or overriden via FaceFXActor */
+	EFaceFXBlendMode BlendMode;
 
 	/** Dirty indicator */
 	uint8 bIsDirty : 1;
@@ -566,11 +570,14 @@ private:
 	/** Indicator if this character is allowed to play */
 	uint8 bCanPlay : 1;
 
-	/** Indicator that defines if the FaceFX character shall play the sound wave assigned to the FaceFX Animation asset automatically when this animation is getting played */
-	uint8 bIsAutoPlaySound : 1;
+	/** Indicator if compensate for force front x axis was used. */
+	uint8 bCompensatedForForceFrontXAxis : 1;
 
 	/** Indicator if the use of available morph targets shall be disabled */
 	uint8 bDisabledMorphTargets : 1;
+
+	/** Indicator if the use of available material parameters shall be disabled */
+	uint8 bDisabledMaterialParameters : 1;
 
 #if WITH_EDITOR
 	uint32 LastFrameNumber;
@@ -578,13 +585,13 @@ private:
 	/** The event callback handle for OnFaceFXAnimChanged */
 	FDelegateHandle OnFaceFXAnimChangedHandle;
 
-	/** 
+	/**
 	* Callback for when an asset changed
 	* @param Asset The asset which changed
 	*/
-	void OnFaceFXAssetChanged(class UFaceFXAsset* Asset);
+	void OnFaceFXAssetChanged(UFaceFXAsset* Asset);
 
-	DECLARE_MULTICAST_DELEGATE_OneParam(FOnAssetChangedSignature, class UFaceFXAsset* /*Asset*/);
+	DECLARE_MULTICAST_DELEGATE_OneParam(FOnAssetChangedSignature, UFaceFXAsset* /*Asset*/);
 
 public:
 	/** Event that gets triggered when an animation asset gets loaded */

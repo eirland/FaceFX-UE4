@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -19,6 +19,10 @@
 *******************************************************************************/
 
 #pragma once
+
+#include "CoreMinimal.h"
+
+struct FSlateBrush;
 
 /** A wrapper for the FaceFX related slate style sets */
 struct FFaceFXStyle
@@ -60,14 +64,14 @@ struct FFaceFXStyle
 	static const FSlateBrush* GetBrushStateIconError();
 
 private:
-	
+
     /**
     * Gets the filepath for a file located inside the FaceFX plugin resources directory
     * @param RelativePath The path relative to the resources directory
     * @param Extension The file extension
     */
     static FString GetResourcePath(const FString& RelativePath, const ANSICHAR* Extension);
-	
+
 	/** The style set instance */
 	static TSharedPtr< class FSlateStyleSet > StyleSet;
 };

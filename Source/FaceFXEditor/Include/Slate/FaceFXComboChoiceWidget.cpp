@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -17,10 +17,14 @@
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   SOFTWARE.
 *******************************************************************************/
-
-#include "FaceFXEditor.h"
 #include "FaceFXComboChoiceWidget.h"
-#include "EditorStyle.h"
+#include "FaceFXEditor.h"
+#include "Editor.h"
+#include "EditorStyleSet.h"
+#include "Widgets/Layout/SScrollBox.h"
+#include "Widgets/Layout/SBorder.h"
+#include "Widgets/SBoxPanel.h"
+#include "Widgets/Input/SComboBox.h"
 
 #define LOCTEXT_NAMESPACE "FaceFX"
 
@@ -67,7 +71,7 @@ void FFaceFXComboChoiceWidget::Construct(const FArguments& Args)
 	FSlateFontInfo MessageFont( FEditorStyle::GetFontStyle(TEXT("StandardDialog.LargeFont")));
 
 	ChildSlot
-		[	
+		[
 			SNew(SBorder)
 			.BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
 			[

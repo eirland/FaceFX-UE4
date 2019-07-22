@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -18,19 +18,19 @@
   SOFTWARE.
 *******************************************************************************/
 
-#include "FaceFX.h"
-
 #include "Animation/AnimNode_BlendFaceFXAnimation.h"
+#include "FaceFX.h"
 #include "Animation/FaceFXComponent.h"
+#include "Animation/AnimInstanceProxy.h"
+#include "AnimationRuntime.h"
 
 DECLARE_CYCLE_STAT(TEXT("Blend FaceFX Animation"), STAT_FaceFXBlend, STATGROUP_FACEFX);
 DECLARE_CYCLE_STAT(TEXT("Blend FaceFX Animation - Load"), STAT_FaceFXBlendLoad, STATGROUP_FACEFX);
 
 FAnimNode_BlendFaceFXAnimation::FAnimNode_BlendFaceFXAnimation() :
 	Alpha(1.F),
-	TranslationMode(BMM_Replace),
-	RotationMode(BMM_Replace),
-	ScaleMode(BMM_Replace),
+	bSkipBoneMappingWithoutNS(false),
+	LODThreshold(INDEX_NONE),
 	bFaceFXCharacterLoadingCompleted(false)
 {
 #if !UE_BUILD_SHIPPING
@@ -38,40 +38,40 @@ FAnimNode_BlendFaceFXAnimation::FAnimNode_BlendFaceFXAnimation() :
 #endif
 }
 
-void FAnimNode_BlendFaceFXAnimation::Initialize(const FAnimationInitializeContext& Context)
+void FAnimNode_BlendFaceFXAnimation::Initialize_AnyThread(const FAnimationInitializeContext& Context)
 {
 	ComponentPose.Initialize(Context);
 
-	//fix to size of 1 as we reuse this container when apply a single bone transforms. 
-	//We use this one single container to prevent creation/add/empty of temp containers during runtime per tick and bone. 
+	//fix to size of 1 as we reuse this container when apply a single bone transforms.
+	//We use this one single container to prevent creation/add/empty of temp containers during runtime per tick and bone.
 	//We always directly access [0] assuming an entry was added in here
 	if(TargetBlendTransform.Num() == 0)
 	{
 		TargetBlendTransform.AddZeroed(1);
 	}
+
+	LoadFaceFXData(Context.AnimInstanceProxy);
 }
 
-void FAnimNode_BlendFaceFXAnimation::CacheBones(const FAnimationCacheBonesContext & Context) 
+void FAnimNode_BlendFaceFXAnimation::CacheBones_AnyThread(const FAnimationCacheBonesContext & Context)
 {
 	ComponentPose.CacheBones(Context);
-
-	LoadFaceFXData(Context.AnimInstance);
 }
 
-void FAnimNode_BlendFaceFXAnimation::LoadFaceFXData(UAnimInstance* AnimInstance)
+void FAnimNode_BlendFaceFXAnimation::LoadFaceFXData(FAnimInstanceProxy* AnimInstanceProxy)
 {
-	QUICK_SCOPE_CYCLE_COUNTER(STAT_FaceFXBlendLoad);
+	SCOPE_CYCLE_COUNTER(STAT_FaceFXBlendLoad);
 
 	BoneIndices.Empty();
 
-	if(!AnimInstance)
+	if(!AnimInstanceProxy)
 	{
 		//wait until we have a proper anim instance
 		bFaceFXCharacterLoadingCompleted = false;
 		return;
 	}
 
-	if(USkeletalMeshComponent* Component = AnimInstance->GetSkelMeshComponent())
+	if(USkeletalMeshComponent* Component = AnimInstanceProxy->GetSkelMeshComponent())
 	{
 		AActor* Owner = Component->GetOwner();
 
@@ -84,33 +84,52 @@ void FAnimNode_BlendFaceFXAnimation::LoadFaceFXData(UAnimInstance* AnimInstance)
 
 		bFaceFXCharacterLoadingCompleted = true;
 
+		//generate the bone mapping indices out of the bone names
 		if(UFaceFXComponent* FaceFXComp = Owner->FindComponentByClass<UFaceFXComponent>())
 		{
 			if(UFaceFXCharacter* FaceFXChar = FaceFXComp->GetCharacter(Component))
 			{
+				BlendMode = FaceFXChar->GetBlendMode();
+
 				const TArray<FName>& BoneNames = FaceFXChar->GetBoneNames();
+				const TArray<FTransform>& BoneRefPoses = Component->SkeletalMesh->RefSkeleton.GetRefBonePose();
 
 				for(const FName& BoneName : BoneNames)
 				{
-					//find index where the transforms of this 
+					//find index where the transforms of this
 					const int32 BoneTransformIdx = FaceFXChar->GetBoneNameTransformIndex(BoneName);
 					if(BoneTransformIdx != INDEX_NONE)
 					{
 						//find skeleton bone index
-						const int32 BoneIdx = Component->GetBoneIndex(BoneName);
+						int32 BoneIdx = Component->GetBoneIndex(BoneName);
+
+						if (BoneIdx == INDEX_NONE && !bSkipBoneMappingWithoutNS)
+						{
+							//strip any existing namespace from the bone name and try matching against it
+							FString BoneNameWithOutNS = BoneName.ToString();
+							int32 LastNSLocation;
+							if (BoneNameWithOutNS.FindLastChar(':', LastNSLocation) && BoneNameWithOutNS.Len() > LastNSLocation)
+							{
+								BoneNameWithOutNS = BoneNameWithOutNS.RightChop(LastNSLocation + 1);
+								BoneIdx = Component->GetBoneIndex(*BoneNameWithOutNS);
+							}
+						}
+
 						if(BoneIdx != INDEX_NONE)
 						{
-							BoneIndices.Add(FBlendFacialAnimationEntry(BoneIdx, BoneTransformIdx));
+							const FTransform& BoneRefPose = BoneRefPoses[BoneIdx];
+
+							BoneIndices.Add(FBlendFacialAnimationEntry(BoneIdx, BoneTransformIdx, BoneRefPose));
 						}
 						else
 						{
-							UE_LOG(LogFaceFX, Warning, TEXT("BlendFacialAnimation: Unable to find FaceFX bone within skeletal mesh. Bone: %s. SkelMesh: %s. Actor: %s"), 
+							UE_LOG(LogFaceFX, Warning, TEXT("BlendFacialAnimation: Unable to find FaceFX bone within skeletal mesh. Bone: %s. SkelMesh: %s. Actor: %s"),
 								*BoneName.GetPlainNameString(), *GetNameSafe(Component->SkeletalMesh), *GetNameSafe(Component->GetOwner()));
 						}
 					}
 					else
 					{
-						UE_LOG(LogFaceFX, Warning, TEXT("BlendFacialAnimation: Unable to find FaceFX bone transformation index. Bone: %i. Actor: %s"), 
+						UE_LOG(LogFaceFX, Warning, TEXT("BlendFacialAnimation: Unable to find FaceFX bone transformation index. Bone: %i. Actor: %s"),
 							*BoneName.GetPlainNameString(), *GetNameSafe(Component->GetOwner()));
 					}
 				}
@@ -134,37 +153,55 @@ void FAnimNode_BlendFaceFXAnimation::LoadFaceFXData(UAnimInstance* AnimInstance)
 	}
 }
 
-void FAnimNode_BlendFaceFXAnimation::Update(const FAnimationUpdateContext& Context)
+void FAnimNode_BlendFaceFXAnimation::Update_AnyThread(const FAnimationUpdateContext& Context)
 {
 	ComponentPose.Update(Context);
-	EvaluateGraphExposedInputs.Execute(Context);
+	GetEvaluateGraphExposedInputs().Execute(Context);
 }
 
-void FAnimNode_BlendFaceFXAnimation::Evaluate(FPoseContext& Output)
+void FAnimNode_BlendFaceFXAnimation::Evaluate_AnyThread(FPoseContext& Output)
 {
-	//convert on the fly to component space and back - This should not happen as the node uses CS. 
+	//convert on the fly to component space and back - This should not happen as the node uses CS.
 	//Yet it happened on invalid VIMs. When this happens the blend node needs to be relinked and the VIM needs to be recompiled and saved
-	FComponentSpacePoseContext InputCSPose(Output.AnimInstance);
-	EvaluateComponentSpace(InputCSPose);
-	InputCSPose.Pose.ConvertToLocalPoses(Output.Pose);
+	FComponentSpacePoseContext InputCSPose(Output.AnimInstanceProxy);
+	EvaluateComponentSpace_AnyThread(InputCSPose);
+	FCSPose<FCompactPose>::ConvertComponentPosesToLocalPoses(InputCSPose.Pose, Output.Pose);
 
 #if !UE_BUILD_SHIPPING
 	if(!bIsDebugLocalSpaceBlendShown)
 	{
 		//show warning only once per node to prevent excessive log spam
-		UE_LOG(LogFaceFX, Warning, TEXT("FAnimNode_BlendFacialAnimation::Evaluate. The blend node is using local space input. Please check, relink the blend node and resave VIM. %s. Also contact a FaceFX programmer."), *GetNameSafe(Output.AnimInstance));
+		UE_LOG(LogFaceFX, Warning, TEXT("FAnimNode_BlendFacialAnimation::Evaluate. The blend node is using local space input. Please check, relink the blend node and resave VIM. %s. Also contact a FaceFX programmer."), *GetNameSafe(Output.AnimInstanceProxy->GetAnimInstanceObject()));
 		bIsDebugLocalSpaceBlendShown = true;
 	}
 #endif
 }
 
-void FAnimNode_BlendFaceFXAnimation::EvaluateComponentSpace(FComponentSpacePoseContext& Output)
+bool FaceFXContainsNaN(const TArray<FBoneTransform>& BoneTransforms)
 {
-	QUICK_SCOPE_CYCLE_COUNTER(STAT_FaceFXBlend);
+	for (int32 i = 0; i < BoneTransforms.Num(); ++i)
+	{
+		if (BoneTransforms[i].Transform.ContainsNaN())
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void FAnimNode_BlendFaceFXAnimation::EvaluateComponentSpace_AnyThread(FComponentSpacePoseContext& Output)
+{
+	SCOPE_CYCLE_COUNTER(STAT_FaceFXBlend);
 
 	ComponentPose.EvaluateComponentSpace(Output);
 
-	if(!Output.AnimInstance)
+	if(!Output.AnimInstanceProxy)
+	{
+		return;
+	}
+
+	if(!IsLODEnabled(Output.AnimInstanceProxy))
 	{
 		return;
 	}
@@ -172,7 +209,7 @@ void FAnimNode_BlendFaceFXAnimation::EvaluateComponentSpace(FComponentSpacePoseC
 	if(!bFaceFXCharacterLoadingCompleted)
 	{
 		//character not done loading yet -> try to retrieve again
-		LoadFaceFXData(Output.AnimInstance);
+		LoadFaceFXData(Output.AnimInstanceProxy);
 	}
 
 	if(BoneIndices.Num() <= 0)
@@ -188,7 +225,7 @@ void FAnimNode_BlendFaceFXAnimation::EvaluateComponentSpace(FComponentSpacePoseC
 		return;
 	}
 
-	if(USkeletalMeshComponent* Component = Output.AnimInstance->GetSkelMeshComponent())
+	if(USkeletalMeshComponent* Component = Output.AnimInstanceProxy->GetSkelMeshComponent())
 	{
 		const AActor* Owner = Component->GetOwner();
 
@@ -202,52 +239,43 @@ void FAnimNode_BlendFaceFXAnimation::EvaluateComponentSpace(FComponentSpacePoseC
 				{
 					const FTransform& FaceFXBoneTM = FaceFXBoneTransforms[Entry.TransformIdx];
 					const int32 BoneIdx = Entry.BoneIdx;
-          FCompactPoseBoneIndex CompactPoseBoneIndex = Output.Pose.GetPose().GetBoneContainer().MakeCompactPoseIndex(FMeshPoseBoneIndex(BoneIdx));
+					FCompactPoseBoneIndex CompactPoseBoneIndex = Output.Pose.GetPose().GetBoneContainer().MakeCompactPoseIndex(FMeshPoseBoneIndex(BoneIdx));
+
+					// Skip this bone if it doesn't exist at the current LOD level.
+					if(CompactPoseBoneIndex.GetInt() == INDEX_NONE)
+					{
+						continue;
+					}
 
 					//fill target transform
-					TargetBlendTransform[0].Transform = Output.Pose.GetComponentSpaceTransform(CompactPoseBoneIndex);
 					TargetBlendTransform[0].BoneIndex = CompactPoseBoneIndex;
 
 					//convenience alias
 					FTransform& BoneTM = TargetBlendTransform[0].Transform;
 
-					//convert to Bone Space
-					FAnimationRuntime::ConvertCSTransformToBoneSpace(Component, Output.Pose, BoneTM, CompactPoseBoneIndex, BCS_ParentBoneSpace);
-
 					//apply transformations in bone space
-					if(TranslationMode == BMM_Replace && RotationMode == BMM_Replace && ScaleMode == BMM_Replace)
+					if(BlendMode == EFaceFXBlendMode::Replace)
 					{
-						//full replace
 						BoneTM = FaceFXBoneTM;
 					}
 					else
 					{
-						//Scale first
-						switch(ScaleMode)
-						{
-						case BMM_Additive: BoneTM.SetScale3D(BoneTM.GetScale3D() * FaceFXBoneTM.GetScale3D()); break;
-						case BMM_Replace: BoneTM.SetScale3D(FaceFXBoneTM.GetScale3D()); break;
-						}
+						//additive mode
+						BoneTM = Output.Pose.GetComponentSpaceTransform(CompactPoseBoneIndex);
 
-						switch(RotationMode)
-						{
-						case BMM_Additive: BoneTM.SetRotation(FaceFXBoneTM.GetRotation() * BoneTM.GetRotation()); break;
-						case BMM_Replace: BoneTM.SetRotation(FaceFXBoneTM.GetRotation()); break;
-						}
+						//convert to Bone Space
+						FAnimationRuntime::ConvertCSTransformToBoneSpace(FTransform::Identity, Output.Pose, BoneTM, CompactPoseBoneIndex, EBoneControlSpace::BCS_ParentBoneSpace);
 
-						//blend by mode
-						switch(TranslationMode)
-						{
-						case BMM_Additive: BoneTM.AddToTranslation(FaceFXBoneTM.GetTranslation()); break;
-						case BMM_Replace: BoneTM.SetTranslation(FaceFXBoneTM.GetTranslation()); break;
-						}
+						BoneTM.SetScale3D(BoneTM.GetScale3D() + FaceFXBoneTM.GetScale3D());
+						BoneTM.SetRotation(FaceFXBoneTM.GetRotation() * BoneTM.GetRotation());
+						BoneTM.AddToTranslation(FaceFXBoneTM.GetTranslation());
 					}
 
 					//convert back to Component Space
-					FAnimationRuntime::ConvertBoneSpaceTransformToCS(Component, Output.Pose, BoneTM, CompactPoseBoneIndex, BCS_ParentBoneSpace);
+					FAnimationRuntime::ConvertBoneSpaceTransformToCS(FTransform::Identity, Output.Pose, BoneTM, CompactPoseBoneIndex, EBoneControlSpace::BCS_ParentBoneSpace);
 
 					//sanity check
-					//checkSlow(!ContainsNaN(resultTransforms));
+					checkSlow(!FaceFXContainsNaN(TargetBlendTransform));
 
 					//apply to pose after each bone transform update in order to have proper parent transforms when update childs
 					Output.Pose.LocalBlendCSBoneTransforms(TargetBlendTransform, BlendWeight);

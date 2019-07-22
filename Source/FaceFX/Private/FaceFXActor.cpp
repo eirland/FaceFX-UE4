@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -18,6 +18,7 @@
   SOFTWARE.
 *******************************************************************************/
 
+#include "FaceFXActor.h"
 #include "FaceFX.h"
 
 #define LOCTEXT_NAMESPACE "FaceFX"
@@ -26,21 +27,16 @@ UFaceFXActor::UFaceFXActor(const class FObjectInitializer& PCIP) : Super(PCIP)
 {
 }
 
-SIZE_T UFaceFXActor::GetResourceSize(EResourceSizeMode::Type Mode)
+void UFaceFXActor::GetResourceSizeEx(FResourceSizeEx& CumulativeResourceSize)
 {
-	SIZE_T ResSize = Super::GetResourceSize(Mode);
+	Super::GetResourceSizeEx(CumulativeResourceSize);
 
 	//only count cooked data without any references
-	if(Mode == EResourceSizeMode::Exclusive)
+	if(CumulativeResourceSize.GetResourceSizeMode() == EResourceSizeMode::Exclusive)
 	{
-		if(PlatformData.Num() > 0)
-		{
-			//take the first entry as an approximation
-			const FFaceFXActorData& Data = PlatformData[0];
-			ResSize += Data.ActorRawData.Num() * Data.ActorRawData.GetTypeSize();
-			ResSize += Data.BonesRawData.Num() * Data.BonesRawData.GetTypeSize();
-			ResSize += Data.Ids.Num() * Data.Ids.GetTypeSize();
-		}
+		CumulativeResourceSize.AddDedicatedSystemMemoryBytes(ActorData.ActorRawData.Num() * ActorData.ActorRawData.GetTypeSize());
+		CumulativeResourceSize.AddDedicatedSystemMemoryBytes(ActorData.BonesRawData.Num() * ActorData.BonesRawData.GetTypeSize());
+		CumulativeResourceSize.AddDedicatedSystemMemoryBytes(ActorData.Ids.Num() * ActorData.Ids.GetTypeSize());
 	}
 	else
 	{
@@ -49,13 +45,11 @@ SIZE_T UFaceFXActor::GetResourceSize(EResourceSizeMode::Type Mode)
 		{
 			if(Anim)
 			{
-				ResSize += Anim->GetResourceSize(Mode);
+				Anim->GetResourceSizeEx(CumulativeResourceSize);
 			}
 		}
 #endif
 	}
-
-	return ResSize;
 }
 
 #if WITH_EDITORONLY_DATA
@@ -64,11 +58,6 @@ void UFaceFXActor::Serialize(FArchive& Ar)
 {
 	if(!IsTemplate() && Ar.IsSaving())
 	{
-		if(Ar.IsCooking())
-		{
-			ClearPlatformData(Ar, PlatformData);
-		}
-
 #if FACEFX_USEANIMATIONLINKAGE
 		//cleanup references to deleted assets
 		for(int32 i=Animations.Num()-1; i>=0; --i)
@@ -85,9 +74,36 @@ void UFaceFXActor::Serialize(FArchive& Ar)
 	}
 
 	Super::Serialize(Ar);
+
+	if (Ar.IsLoading() && PlatformData_DEPRECATED.Num() > 0)
+	{
+		checkf(!ActorData.IsValid(), TEXT("Asset in invalid state during load."));
+
+		ActorData = PlatformData_DEPRECATED[0];
+
+		PlatformData_DEPRECATED.Empty();
+
+		UE_LOG(LogFaceFX, Warning, TEXT("Upgraded FaceFXActor %s. Please re-save."), *AssetName);
+
+		// The editor does not allow you to mark a package as dirty during load, but in this case we need to
+		// bypass that enforcement and do it anyway. This is important because the above "upgrade" could
+		// potentially reclaim a lot of memory and if we didn't mark the package as dirty the user would have to
+		// a) see our warning from above (unlikely) and b) select each asset individually in the content browser
+		// and force save.
+		UPackage* Package = GetOutermost();
+
+		const bool bIsDirty = Package->IsDirty();
+
+		if(!bIsDirty)
+		{
+			Package->SetDirtyFlag(true);
+		}
+
+		Package->PackageMarkedDirtyEvent.Broadcast(Package, bIsDirty);
+	}
 }
 
-/** 
+/**
 * Gets the details in a human readable string representation
 * @param outDetails The resulting details string
 */
@@ -97,7 +113,7 @@ void UFaceFXActor::GetDetails(FString& OutDetails) const
 
 	OutDetails = LOCTEXT("DetailsActorHeader", "FaceFX Actor").ToString() + TEXT("\n\n");
 	OutDetails += LOCTEXT("DetailsSource", "Source: ").ToString() + AssetName + TEXT("\n");
-	
+
 	if(bIsValid)
 	{
 		const int32 EstSize = GetData().ActorRawData.Max() + GetData().BonesRawData.Max() + GetData().Ids.GetTypeSize() * GetData().Ids.Max();
@@ -136,7 +152,7 @@ void UFaceFXActor::GetDetails(FString& OutDetails) const
 	//Ids
 	if(bIsValid)
 	{
-		auto& Ids = PlatformData[0].Ids;
+		auto& Ids = ActorData.Ids;
 
 		TArray<FString> SortedBones;
 		SortedBones.Reserve(Ids.Num());

@@ -1,6 +1,6 @@
 ﻿/*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -25,29 +25,42 @@ public class FaceFXLib : ModuleRules
 {
     //used to show warning only once.
     static bool DebugLibsWarningDisplayed = false;
-    
-    //The folder in the FaceFX runtime is located in. You need to update this whenever you update your FaceFX runtime
-    public static string RuntimeFolder { get { return "facefx-runtime-1.1.0/facefx"; } }
 
-    public FaceFXLib(TargetInfo Target)
+    //The folder in the FaceFX runtime is located in. You need to update this whenever you update your FaceFX runtime
+    public static string RuntimeFolder { get { return "facefx-runtime-1.5.1/facefx"; } }
+
+    public FaceFXLib(ReadOnlyTargetRules Target) : base(Target)
     {
+        PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+        bEnforceIWYU = false;
+
         Type = ModuleType.External;
 
         string FaceFXLib;
         string FaceFXDir;
         string FaceFXDirLib;
-        if (GetLibs(Target, out FaceFXDir, out FaceFXDirLib, out FaceFXLib))
+
+        GetLibs(Target, out FaceFXDir, out FaceFXDirLib, out FaceFXLib);
+
+        if (Target.Platform == UnrealTargetPlatform.Android)
+        {
+            PublicLibraryPaths.Add(FaceFXDirLib + "/x86_64");
+            PublicLibraryPaths.Add(FaceFXDirLib + "/x86");
+            PublicLibraryPaths.Add(FaceFXDirLib + "/arm64-v8a");
+            PublicLibraryPaths.Add(FaceFXDirLib + "/armeabi-v7a");
+        }
+        else
         {
             PublicLibraryPaths.Add(FaceFXDirLib);
+        }
 
-            if (Target.Platform == UnrealTargetPlatform.Mac)
-            {
-                PublicAdditionalLibraries.Add(FaceFXDirLib + "/" + FaceFXLib);
-            }
-            else
-            {
-                PublicAdditionalLibraries.Add(FaceFXLib);
-            }
+        if (Target.Platform == UnrealTargetPlatform.Mac)
+        {
+            PublicAdditionalLibraries.Add(FaceFXDirLib + "/" + FaceFXLib);
+        }
+        else
+        {
+            PublicAdditionalLibraries.Add(FaceFXLib);
         }
     }
 
@@ -59,8 +72,7 @@ public class FaceFXLib : ModuleRules
     /// <param name="FaceFXDir">The result facefx directory</param>
     /// <param name="FaceFXDirLib">The result facefx directory for libraries</param>
     /// <param name="FaceFXLib">The actual lib filename</param>
-    /// <returns>True if all libs were found, else false</returns>
-    private bool GetLibs(TargetInfo Target, out string FaceFXDir, out string FaceFXDirLib, out string FaceFXLib)
+    private void GetLibs(ReadOnlyTargetRules Target, out string FaceFXDir, out string FaceFXDirLib, out string FaceFXLib)
     {
         FaceFXDir = Path.Combine(new []{ this.ModuleDirectory, RuntimeFolder });
         FaceFXDirLib = string.Empty;
@@ -68,56 +80,79 @@ public class FaceFXLib : ModuleRules
 
         if (!Directory.Exists(FaceFXDir))
         {
-            System.Console.WriteLine(System.String.Format("FaceFX: Cannot find FaceFX Folder '{0}'", FaceFXDir));
-            return false;
+            throw new BuildException(System.String.Format("FaceFX: cannot find the FaceFX Runtime directory '{0}'", FaceFXDir));
         }
 
-        //default static lib file
-        if (Target.Platform == UnrealTargetPlatform.Mac)
-        {
-            FaceFXLib = "libfacefx.a";
-        }
-        else
-        {
-            FaceFXLib = "libfacefx.lib";
-        }
+        string CompilerFolder = "vs14";
 
-        string CompilerFolder = WindowsPlatform.Compiler == WindowsCompiler.VisualStudio2015 ? "vs14" : "vs12";
+        if (Target.WindowsPlatform.Compiler == WindowsCompiler.VisualStudio2017
+         || Target.WindowsPlatform.Compiler == WindowsCompiler.VisualStudio2019)
+        {
+            CompilerFolder = "vs15";
+        }
 
         string PlatformFolder = string.Empty;
 
         switch (Target.Platform)
         {
             case UnrealTargetPlatform.Win32:
+                FaceFXLib = "libfacefx.lib";
                 PlatformFolder = Path.Combine(new[] { "windows", CompilerFolder, "Win32" });
                 break;
             case UnrealTargetPlatform.Win64:
+                FaceFXLib = "libfacefx.lib";
                 PlatformFolder = Path.Combine(new[] { "windows", CompilerFolder, "x64" });
                 break;
             case UnrealTargetPlatform.Mac:
+                FaceFXLib = "libfacefx.a";
                 PlatformFolder = Path.Combine(new[] { "osx" });
                 break;
-            //case UnrealTargetPlatform.XboxOne:
-            //    PlatformFolder = Path.Combine(new[] { "xboxone", CompilerFolder });
-            //    break;
-            //case UnrealTargetPlatform.PS4:
-            //    FaceFXLib = "facefx";
-            //    PlatformFolder = Path.Combine(new[] { "ps4", CompilerFolder });
-            //    break;
+            case UnrealTargetPlatform.IOS:
+                FaceFXLib = "facefx";
+                PlatformFolder = Path.Combine(new[] { "ios" });
+                break;
+            case UnrealTargetPlatform.Android:
+                FaceFXLib = "facefx";
+                PlatformFolder = Path.Combine(new[] { "android/gnustl_shared" });
+                break;
+            case UnrealTargetPlatform.XboxOne:
+                FaceFXLib = "libfacefx.lib";
+                PlatformFolder = Path.Combine(new[] { "xboxone", CompilerFolder });
+                break;
+            case UnrealTargetPlatform.PS4:
+                FaceFXLib = "facefx";
+                PlatformFolder = Path.Combine(new[] { "ps4", CompilerFolder });
+                break;
+            case UnrealTargetPlatform.Switch:
+                FaceFXLib = "facefx";
+                PlatformFolder = Path.Combine(new[] { "nx", CompilerFolder, "NX64" });
+                break;
             default:
-                System.Console.WriteLine(System.String.Format("FaceFX disabled. Unsupported target platform: {0}", Target.Platform));
-                return false;
+                throw new BuildException(System.String.Format("FaceFX: unsupported target platform '{0}'", Target.Platform));
         }
 
         string ConfigFolder = "Release";
+
+        if (Target.Platform == UnrealTargetPlatform.IOS)
+        {
+            // Simulator not supported.
+            ConfigFolder = "Release-iphoneos";
+        }
 
         switch (Target.Configuration)
         {
             case UnrealTargetConfiguration.Debug:
                 // change bDebugBuildsActuallyUseDebugCRT to true in BuildConfiguration.cs to actually link debug binaries
-                if (BuildConfiguration.bDebugBuildsActuallyUseDebugCRT)
+                if (Target.bDebugBuildsActuallyUseDebugCRT)
                 {
                     ConfigFolder = "Debug";
+
+                    if (Target.Platform == UnrealTargetPlatform.IOS)
+                    {
+                        // Simulator not supported.
+                        ConfigFolder = "Debug-iphoneos";
+                    }
+
                     if (DebugLibsWarningDisplayed == false)
                     {
                         System.Console.WriteLine("Using debug libs for FaceFX");
@@ -131,10 +166,7 @@ public class FaceFXLib : ModuleRules
 
         if (!Directory.Exists(FaceFXDirLib))
         {
-            System.Console.WriteLine(System.String.Format("FaceFX: Cannot find FaceFX lib Folder '{0}'", FaceFXDirLib));
-            return false;
+            throw new BuildException(System.String.Format("FaceFX: cannot find the FaceFX Runtime library folder '{0}'", FaceFXDirLib));
         }
-
-        return true;
     }
 }

@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -18,8 +18,9 @@
   SOFTWARE.
 *******************************************************************************/
 
-#include "FaceFXEditor.h"
 #include "Factories/FaceFXAnimFactory.h"
+#include "FaceFXEditor.h"
+#include "Include/Slate/FaceFXStyle.h"
 #include "Factories/FaceFXActorFactory.h"
 #include "FaceFXAnim.h"
 
@@ -33,12 +34,16 @@ UFaceFXAnimFactory::UFaceFXAnimFactory(const class FObjectInitializer& PCIP)
 }
 
 uint32 UFaceFXAnimFactory::GetMenuCategories() const
-{ 
+{
 	return FFaceFXEditorTools::AssetCategory;
 }
 
 UObject* UFaceFXAnimFactory::FactoryCreateNew(UClass* Class, UObject* InParent, FName Name, EObjectFlags Flags, UObject* Context, FFeedbackContext* Warn)
 {
-
 	return NewObject<UFaceFXAsset>(InParent, Class, Name, Flags);
+}
+
+FName UFaceFXAnimFactory::GetNewAssetThumbnailOverride() const
+{
+	return FFaceFXStyle::GetBrushIdFxAnim();
 }

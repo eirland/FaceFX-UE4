@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -20,13 +20,16 @@
 
 #pragma once
 
+#include "CoreMinimal.h"
+#include "UObject/Object.h"
+#include "UObject/ObjectMacros.h"
 #include "FaceFXAsset.generated.h"
 
 /** Base of all FaceFX assets */
 UCLASS(Abstract, hideCategories=Object)
 class FACEFX_API UFaceFXAsset : public UObject
 {
-	GENERATED_UCLASS_BODY()
+	GENERATED_BODY()
 
 public:
 
@@ -79,7 +82,7 @@ public:
 		return !AssetFolder.IsEmpty() && !AssetName.IsEmpty();
 	}
 
-	/** 
+	/**
 	* Gets the relative path to the source asset
 	* @returns The path to the asset
 	*/
@@ -88,14 +91,11 @@ public:
 		return AssetFolder / (AssetName + TEXT(".facefx"));
 	}
 
-	/** 
+	/**
 	* Gets the absolute path to the source asset
 	* @returns The path to the asset
 	*/
-	inline FString GetAssetPathAbsolute() const
-	{
-		return FPaths::ConvertRelativePathToFull(GetAssetPath());
-	}
+	FString GetAssetPathAbsolute() const;
 
 	/**
 	* Gets the relative source asset folder
@@ -110,10 +110,7 @@ public:
 	* Gets the absolute source asset folder
 	* @returns The absolute folder
 	*/
-	inline FString GetAssetFolderAbsolute() const
-	{
-		return FPaths::ConvertRelativePathToFull(AssetFolder);
-	}
+	FString GetAssetFolderAbsolute() const;
 
 	/**
 	* Gets the source asset name
@@ -133,14 +130,6 @@ protected:
 	/** The name of the asset. Used to build filenames (i.e. <name>.facefx)*/
 	UPROPERTY(EditInstanceOnly, Category=FaceFX)
 	FString AssetName;
-
-	/** 
-	* Clear platform specific data based on the target Archive platform
-	* @param Ar The archive to use
-	* @param platformData The data to clear
-	* @returns True if succeeded, else false
-	*/
-	template <typename T> bool ClearPlatformData(const class FArchive& Ar, T& platformData);
 
 #endif //WITH_EDITORONLY_DATA
 };

@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -19,8 +19,3 @@
 *******************************************************************************/
 
 #pragma once
-
-#include "UnrealEd.h"
-
-/** The callback for when assets get imported and we want to do something before the compiled data gets deleted */
-DECLARE_DELEGATE_FourParams(FCompilationBeforeDeletionDelegate, class UObject* /** Asset */, const FString& /* CompilationFolder */, bool /** ImportResult */, struct FFaceFXImportResult& /** ResultMessages */)

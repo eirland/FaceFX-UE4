@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -19,15 +19,20 @@
 *******************************************************************************/
 
 #include "FaceFXEditor.h"
-
 #include "Include/Slate/FaceFXStyle.h"
 #include "AssetTypeActions/AssetTypeActions_FaceFXActor.h"
 #include "AssetTypeActions/AssetTypeActions_FaceFXAnim.h"
 #include "FaceFXAnim.h"
 #include "FaceFXCharacter.h"
 #include "FaceFXEditorTools.h"
-
+#include "FaceFXEditorConfig.h"
+#include "Sequencer/FaceFXSequencer.h"
+#include "Sequencer/FaceFXAnimationTrackEditor.h"
 #include "Matinee/MatineeActor.h"
+#include "EngineUtils.h"
+#include "Editor.h"
+#include "Modules/ModuleManager.h"
+#include "ISettingsModule.h"
 
 #define LOCTEXT_NAMESPACE "FaceFX"
 
@@ -36,9 +41,9 @@ class FFaceFXEditorModule : public FDefaultModuleImpl
 	virtual void StartupModule() override
 	{
 		IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
-		
+
 		FFaceFXEditorTools::AssetCategory = AssetTools.RegisterAdvancedAssetCategory(FName(TEXT("FaceFX")), LOCTEXT("AssetCategory", "FaceFX"));
-		
+
 		AssetTypeActions.Add(MakeShareable(new FAssetTypeActions_FaceFXActor));
 		AssetTypeActions.Add(MakeShareable(new FAssetTypeActions_FaceFXAnim));
 
@@ -48,11 +53,17 @@ class FFaceFXEditorModule : public FDefaultModuleImpl
 		}
 
 		FFaceFXStyle::Initialize();
+		FFaceFXSequencer::Get().Initialize();
 
-		if(GIsEditor && FFaceFXEditorTools::IsShowToasterMessageOnIncompatibleAnim())
+		if(GIsEditor && UFaceFXEditorConfig::Get().IsShowToasterMessageOnIncompatibleAnim())
 		{
 			OnFaceFXCharacterPlayAssetIncompatibleHandle = UFaceFXCharacter::OnFaceFXCharacterPlayAssetIncompatible.AddRaw(this, &FFaceFXEditorModule::OnFaceFXCharacterPlayAssetIncompatible);
 		}
+
+		OnEndPieHandle = FEditorDelegates::EndPIE.AddStatic(&FFaceFXEditorModule::OnEndPie);
+		OnPreSaveWorldHandle = FEditorDelegates::PreSaveWorld.AddStatic(&FFaceFXEditorModule::PreSaveWorld);
+
+		RegisterSettings();
 	}
 
 	virtual void ShutdownModule() override
@@ -61,6 +72,9 @@ class FFaceFXEditorModule : public FDefaultModuleImpl
 		{
 			UFaceFXCharacter::OnFaceFXCharacterPlayAssetIncompatible.Remove(OnFaceFXCharacterPlayAssetIncompatibleHandle);
 		}
+
+		FEditorDelegates::EndPIE.Remove(OnEndPieHandle);
+		FEditorDelegates::PreSaveWorld.Remove(OnPreSaveWorldHandle);
 
 		if(FModuleManager::Get().IsModuleLoaded("AssetTools"))
 		{
@@ -74,6 +88,9 @@ class FFaceFXEditorModule : public FDefaultModuleImpl
 		}
 
 		FFaceFXStyle::Shutdown();
+		FFaceFXSequencer::Get().Shutdown();
+
+		UnregisterSettings();
 	}
 
 private:
@@ -87,37 +104,122 @@ private:
 	{
 		checkf(GIsEditor, TEXT("Must only be called from within the editor"));
 
-		//Handle errors differently when being inside matinee to prevent error spamming on the UI when scrubbing/playing through invalid animations
-		static AMatineeActor* ShownMatineeErrorsOwner = nullptr;
-		static TArray<TPair<UFaceFXCharacter*, const UFaceFXAnim*>> ShownMatineeErrors;
-		AMatineeActor* MatineeActor = GEditor->ActiveMatinee.Get();
-		if(MatineeActor && ShownMatineeErrorsOwner == MatineeActor)
+		/** Helper struct to prevent spamming of error message coming from either matinee or sequencer */
+		struct FFaceFXErrorMessageShownData
 		{
-			//while being within matinee we only show the error once
-			TPairInitializer<UFaceFXCharacter*, const UFaceFXAnim*> Entry(Character, Asset);
-			if(ShownMatineeErrors.Contains(Entry))
+			/** The editor instance currently assigned */
+			void* Editor;
+
+			/** The error messages displayed for the currently assigned editor instance */
+			TArray<TPair<UFaceFXCharacter*, const UFaceFXAnim*>> ShownErrors;
+
+			FFaceFXErrorMessageShownData() : Editor(nullptr){}
+
+      // Note: jcr -- renamed Character & Asset to Character_ & Asset_ so as not to shadow Character & Asset parameters to OnFaceFXCharacterPlayAssetIncompatible
+			/**
+			* Updates the data
+			* @param SourceEditor The editor which updates this data
+			* @param Character_ The FaceFX character instance who failed to play the animation
+			* @param Asset_ The asset that was tried to be played and which was incompatible with the actor handle
+			* @returns True if the error message shall be displayed, false if it was already shown
+			*/
+			inline bool Update(void* SourceEditor, UFaceFXCharacter* Character_, const UFaceFXAnim* Asset_)
 			{
-				//already shown once
-				return;
+				if (SourceEditor && Editor == SourceEditor)
+				{
+					//while being within editor we only show the error once
+					TPair<UFaceFXCharacter*, const UFaceFXAnim*> Entry(Character_, Asset_);
+					if (ShownErrors.Contains(Entry))
+					{
+						//already shown once
+						return false;
+					}
+					ShownErrors.Add(Entry);
+				}
+				else
+				{
+					ShownErrors.Reset();
+				}
+				Editor = SourceEditor;
+				return SourceEditor != nullptr;
 			}
-			ShownMatineeErrors.Add(Entry);
-		}
-		else
+		};
+
+		//prevent error message spamming of matinee and sequencer editors
+		static FFaceFXErrorMessageShownData MatineeErrorData;
+		static FFaceFXErrorMessageShownData SequencerErrorData;
+		const bool ShowMessageMatinee = MatineeErrorData.Update(GEditor->ActiveMatinee.Get(), Character, Asset);
+		const bool ShowMessageSequencer = SequencerErrorData.Update(FFaceFXAnimationTrackEditor::GetCurrentSequencer().Pin().Get(), Character, Asset);
+
+		if (!ShowMessageMatinee && !ShowMessageSequencer)
 		{
-			ShownMatineeErrors.Reset();
+			return;
 		}
-		ShownMatineeErrorsOwner = MatineeActor;
-		
-		//prepare and show error messaghe
+
+		//prepare and show error message
 		const AActor* CharacterOwner = Character ? Character->GetTypedOuter<AActor>() : nullptr;
 
-		const FText Msg = FText::Format(LOCTEXT("OnFaceFXCharacterPlayAssetIncompatible", "FaceFX Animation \"{0}\" incompatible with FaceFX instance of actor {1}"), 
+		const FText Msg = FText::Format(LOCTEXT("OnFaceFXCharacterPlayAssetIncompatible", "FaceFX Animation \"{0}\" incompatible with FaceFX instance of actor {1}"),
 			Asset ? FText::FromString(Asset->GetName().ToString()) : FText::GetEmpty(), FText::FromString(CharacterOwner ? CharacterOwner->GetName() : GetNameSafe(Character)));
 
 		FFaceFXEditorTools::ShowError(Msg);
 	}
 
 	FDelegateHandle OnFaceFXCharacterPlayAssetIncompatibleHandle;
+
+	/** The event callback handle for OnEndPie */
+	FDelegateHandle OnEndPieHandle;
+
+	/** The event callback handle for OnPreSaveWorldHandle */
+	FDelegateHandle OnPreSaveWorldHandle;
+
+	/** Callback for when an PIE got ended */
+	static void OnEndPie(bool bIsSimulating)
+	{
+		TArray<UObject*> CharacterInstances;
+		GetObjectsOfClass(UFaceFXCharacter::StaticClass(), CharacterInstances);
+
+		for (UObject* CharacterInstance : CharacterInstances)
+		{
+			CastChecked<UFaceFXCharacter>(CharacterInstance)->Stop(true);
+		}
+	}
+
+	/** Callback for when a world gets saved */
+	static void PreSaveWorld(uint32 SaveFlags, UWorld* World)
+	{
+		check(World);
+
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			AActor* Actor = (*It);
+			check(Actor);
+			const TArray<UActorComponent*> CharacterInstances = Actor->GetComponentsByClass(UFaceFXCharacter::StaticClass());
+			for (UActorComponent* CharacterInstance : CharacterInstances)
+			{
+				CastChecked<UFaceFXCharacter>(CharacterInstance)->Stop(true);
+			}
+		}
+	}
+
+	void RegisterSettings()
+	{
+		if (ISettingsModule* SettingsModule = FModuleManager::GetModulePtr<ISettingsModule>("Settings"))
+		{
+			SettingsModule->RegisterSettings("Project", "Plugins", "FaceFX - Editor",
+				LOCTEXT("FaceFXSettingsName", "FaceFX - Editor"),
+				LOCTEXT("FaceFXSettingsDescription", "Configure FaceFX editor settings"),
+				GetMutableDefault<UFaceFXEditorConfig>());
+		}
+	}
+
+	void UnregisterSettings()
+	{
+		if (ISettingsModule* SettingsModule = FModuleManager::GetModulePtr<ISettingsModule>("Settings"))
+		{
+			SettingsModule->UnregisterSettings("Project", "Plugins", "FaceFX - Editor");
+		}
+	}
 
 	/** List of currently registered asset type actions */
 	TArray<TSharedPtr<FAssetTypeActions_Base>> AssetTypeActions;

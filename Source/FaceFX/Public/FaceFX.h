@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -20,7 +20,6 @@
 
 #pragma once
 
-#include "Engine.h"
 #include "FaceFXCharacter.h"
 #include "FaceFXActor.h"
 #include "FaceFXAnim.h"
@@ -29,18 +28,12 @@
 FACEFX_API DECLARE_LOG_CATEGORY_EXTERN(LogFaceFX, Display, All);
 DECLARE_STATS_GROUP(TEXT("FaceFX"),STATGROUP_FACEFX, STATCAT_Advance);
 
+class UFaceFXAnim;
+struct ffx_anim_handle_t;
+struct FFaceFXAnimData;
+
 struct FACEFX_API FaceFX
 {
-	/**
-	* Gets the path to the FaceFX.ini file
-	* @returns The path to the ini
-	*/
-	static const FString& GetFaceFXIni()
-	{
-		static FString IniPath = FPaths::EnginePluginsDir() / TEXT("Runtime/FaceFX/Config/FaceFX.ini");
-		return IniPath;
-	}
-
 	/**
 	* Gets the FaceFX version
 	* @returns The FaceFX version string
@@ -58,6 +51,35 @@ struct FACEFX_API FaceFX
 	* @returns The streamer
 	*/
 	static struct FStreamableManager& GetStreamer();
+
+	/**
+	* Checks the FaceFX runtime execution result and the errno for errors
+	* @param Value The return value returned from the FaceFX call
+	* @returns True if call succeeded, else false
+	*/
+	static bool Check(int32 Value);
+
+	/**
+	* Gets the latest internal facefx error message
+	* @returns The last error message
+	*/
+	static FString GetFaceFXError();
+
+	/**
+	* Loads a set of animation data
+	* @param AnimData The data to load the animation with
+	* @returns The FaceFX handle if succeeded, else nullptr
+	*/
+	static ffx_anim_handle_t* LoadAnimation(const FFaceFXAnimData& AnimData);
+	
+	/**
+	* Gets the start and end time of a given animation
+	* @param Animation The animation to fetch the bounds for
+	* @param Start The start time if call succeeded
+	* @param End The end time if call succeeded
+	* @returns True if succeeded, else false
+	*/
+	static bool GetAnimationBounds(const UFaceFXAnim* Animation, float& Start, float& End);
 
 private:
 

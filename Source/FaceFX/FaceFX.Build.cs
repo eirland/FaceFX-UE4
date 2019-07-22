@@ -1,6 +1,6 @@
 ﻿/*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -22,23 +22,43 @@ using UnrealBuildTool;
 
 public class FaceFX : ModuleRules
 {
-    public FaceFX(TargetInfo Target)
+    /// <summary>
+    /// Indicator if the FaceFX plugin shall be compiled with Wwise being linked in. Default value: false
+    /// Target audio system can then be selected at runtime via CVar: FaceFX.PreferredAudioSystem (within FaceFXAudio.cpp)
+    /// Default target audio system will be set to Wwise if bCompileWithWwise is set to true
+    /// </summary>
+    private static bool bCompileWithWwise = false;
+
+    public FaceFX(ReadOnlyTargetRules Target) : base(Target)
 	{
+        PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+        bEnforceIWYU = true;
+
+        PublicDependencyModuleNames.Add("TimeManagement");
+
         PrivateDependencyModuleNames.AddRange(
             new string[] {
                 "Core",
                 "CoreUObject",
                 "Engine",
                 "AnimGraphRuntime",
-                "FaceFXLib"
+                "MovieScene",
+                "FaceFXLib",
             }
         );
 
-        if (UEBuildConfiguration.bBuildEditor)
+        if (Target.bBuildEditor)
         {
             PrivateDependencyModuleNames.Add("TargetPlatform");
         }
 
         PublicIncludePathModuleNames.Add("FaceFXLib");
-	}
+
+        if(bCompileWithWwise)
+        {
+            PrivateDependencyModuleNames.Add("AkAudio");
+        }
+
+        PublicDefinitions.Add(string.Format("WITH_WWISE={0}", bCompileWithWwise ? "1" : "0"));
+    }
 }

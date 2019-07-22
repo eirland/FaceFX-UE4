@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -18,25 +18,24 @@
   SOFTWARE.
 *******************************************************************************/
 
+#include "AssetTypeActions_FaceFXActor.h"
 #include "FaceFXEditor.h"
 #include "FaceFXEditorTools.h"
 #include "FaceFX.h"
-#include "AssetTypeActions_FaceFXActor.h"
-
-#include "UnrealEd.h"
-#include "MainFrame.h"
-#include "ModuleManager.h"
+#include "Modules/ModuleManager.h"
+#include "Framework/MultiBox/MultiboxBuilder.h"
+#include "IContentBrowserSingleton.h"
 #include "ContentBrowserModule.h"
 
 #define LOCTEXT_NAMESPACE "FaceFX"
 
 FText FAssetTypeActions_FaceFXActor::GetName() const
-{ 
-	return LOCTEXT("AssetTypeActions_FaceFX", "FaceFX Actor"); 
+{
+	return LOCTEXT("AssetTypeActions_FaceFX", "FaceFX Actor");
 }
 
-UClass* FAssetTypeActions_FaceFXActor::GetSupportedClass() const 
-{ 
+UClass* FAssetTypeActions_FaceFXActor::GetSupportedClass() const
+{
 	return UFaceFXActor::StaticClass();
 }
 
@@ -115,7 +114,6 @@ void FAssetTypeActions_FaceFXActor::GetActions( const TArray<UObject*>& InObject
 #endif //FACEFX_USEANIMATIONLINKAGE
 }
 
-/** Determine if we can edit assets */
 bool FAssetTypeActions_FaceFXActor::CanExecuteEdit(const TArray<UObject*> Objects) const
 {
 	return FFaceFXEditorTools::IsFaceFXStudioInstalled();
@@ -147,7 +145,7 @@ void FAssetTypeActions_FaceFXActor::ExecuteLink(TArray<TWeakObjectPtr<UObject>> 
 	OpenConfig.DialogTitleOverride = LOCTEXT("Asset_LinkFXActorSelectTitle","Select Anim Set Asset To Link");
 	OpenConfig.AssetClassNames.Add(UFaceFXAnim::StaticClass()->GetFName());
 	OpenConfig.bAllowMultipleSelection = true;
-	
+
 	FContentBrowserModule& ContentBrowserModule = FModuleManager::LoadModuleChecked<FContentBrowserModule>("ContentBrowser");
 	ContentBrowserModule.Get().CreateOpenAssetDialog(OpenConfig, FOnAssetsChosenForOpen::CreateStatic(&FAssetTypeActions_FaceFXActor::OnAssetLinkChosen, Objects), FOnAssetDialogCancelled());
 }

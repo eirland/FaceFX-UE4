@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -20,22 +20,27 @@
 
 #pragma once
 
-#include "SCompoundWidget.h"
-#include "FaceFxEditorTools.h"
+#include "CoreMinimal.h"
+#include "FaceFXEditorTools.h"
+#include "Widgets/SCompoundWidget.h"
+#include "Widgets/DeclarativeSyntaxSupport.h"
+#include "Widgets/Views/SListView.h"
+#include "Widgets/Views/STableRow.h"
+#include "Widgets/SWindow.h"
 
 /** A widget that wraps a asset reference into a textbox and goto button */
 class FFaceFXAssetRefWidget : public SCompoundWidget
 {
 public:
 	SLATE_BEGIN_ARGS(FFaceFXAssetRefWidget){}
-	SLATE_ARGUMENT(FStringAssetReference, AssetRef)
+	SLATE_ARGUMENT(FSoftObjectPath, AssetRef)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);
 
 private:
 
-	FReply OnClicked(FStringAssetReference InAssetRef);
+	FReply OnClicked(FSoftObjectPath InAssetRef);
 };
 
 /** A widget that shows the Import result data */
@@ -46,7 +51,7 @@ class FFaceFXResultWidget : public SCompoundWidget
 		FFaceFXImportActionResult Result;
 
 		/** The root action that initially requested the import */
-		TAssetPtr<class UFaceFXAsset> ImportRootAsset;
+		TSoftObjectPtr<class UFaceFXAsset> ImportRootAsset;
 	};
 
 	/** Widget used to display the table rows */
@@ -67,22 +72,22 @@ class FFaceFXResultWidget : public SCompoundWidget
 
 public:
 	SLATE_BEGIN_ARGS(FFaceFXResultWidget) {}
-	SLATE_ARGUMENT(FFaceFXImportResultSet, Result)	
+	SLATE_ARGUMENT(FFaceFXImportResultSet, Result)
 	SLATE_END_ARGS()
 
 	virtual ~FFaceFXResultWidget();
 
 	void Construct(const FArguments& Args);
 
-	/** 
+	/**
 	* Merges the given data into the current result set
 	* @param Data The data to merge
 	* @returns True if succeeded, else false
 	*/
 	bool MergeResult(const FFaceFXImportResultSet& Data);
 
-	/** 
-	* Opens this widget in a modal window 
+	/**
+	* Opens this widget in a modal window
 	* @param InTitle The window title
 	* @param ShowAsModal Indicator if this widget shall be displayed in a modal window
 	*/
@@ -104,7 +109,7 @@ private:
 	{
 		FResultWidgetInstance(const TWeakPtr<class SWidget>& InWindow, const TWeakPtr<SWidget>& InWidget, const FText& InTitle) : Window(InWindow), Widget(InWidget), Title(InTitle){}
 
-		/** 
+		/**
 		* Gets the indicator if this is a valid widget instance
 		* @returns True if valid, else false
 		*/
@@ -113,8 +118,8 @@ private:
 			return Window.IsValid() && Widget.IsValid();
 		}
 
-		/** 
-		* Gets the result widget 
+		/**
+		* Gets the result widget
 		* @returns The result widget
 		*/
 		inline class SWindow* GetWindow() const
@@ -122,9 +127,9 @@ private:
 			SWidget* ResultWidget = Window.Pin().Get();
 			return ResultWidget ? static_cast<SWindow*>(ResultWidget) : nullptr;
 		}
-		
-		/** 
-		* Gets the result widget 
+
+		/**
+		* Gets the result widget
 		* @returns The result widget
 		*/
 		inline FFaceFXResultWidget* GetResultWidget() const

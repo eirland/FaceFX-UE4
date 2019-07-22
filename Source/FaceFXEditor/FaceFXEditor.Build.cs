@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -22,8 +22,11 @@ using UnrealBuildTool;
 
 public class FaceFXEditor : ModuleRules
 {
-    public FaceFXEditor(TargetInfo Target)
+    public FaceFXEditor(ReadOnlyTargetRules Target) : base(Target)
     {
+        PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+        bEnforceIWYU = true;
+
         PrivateDependencyModuleNames.AddRange(
             new string[] {
                 "Core",
@@ -42,8 +45,16 @@ public class FaceFXEditor : ModuleRules
                 "AnimGraph",
                 "BlueprintGraph",
                 "Matinee",
-                "FaceFX"
+                "Sequencer",
+                "MovieScene",
+                "MovieSceneTools",
+                "TimeManagement",
+                "Settings",
+                "FaceFX",
             }
         );
+
+        PublicIncludePaths.Add(ModuleDirectory);
+        PrivateIncludePaths.Add("FaceFX/Private");
     }
 }

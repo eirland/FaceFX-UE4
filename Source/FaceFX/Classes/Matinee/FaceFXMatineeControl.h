@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -22,6 +22,7 @@
 
 #include "FaceFXData.h"
 #include "Matinee/InterpTrackFloatBase.h"
+#include "FaceFXAnim.h"
 #include "FaceFXMatineeControl.generated.h"
 
 /** Information for one FaceFX key in the track. */
@@ -32,7 +33,7 @@ struct FFaceFXTrackKey
 
 	FFaceFXTrackKey() : Time(0.F), bLoop(false), bIsAnimationDurationLoaded(false), AnimationDuration(0.F)	{}
 
-	/** The if of the skel mesh component where this key is working on */
+	/** The id of the skel mesh component where this key is working on */
 	UPROPERTY(EditAnywhere, Category=FaceFX)
 	FFaceFXSkelMeshComponentId SkelMeshComponentId;
 
@@ -42,7 +43,7 @@ struct FFaceFXTrackKey
 
 	/** The animation to play */
 	UPROPERTY(EditAnywhere, Category=FaceFX)
-	TAssetPtr<UFaceFXAnim> Animation;
+	TSoftObjectPtr<UFaceFXAnim> Animation;
 
 	/** The time of the key along the track time line */
 	UPROPERTY()
@@ -52,12 +53,20 @@ struct FFaceFXTrackKey
 	UPROPERTY(EditAnywhere, Category=FaceFX)
 	uint8 bLoop : 1;
 
-	/** 
+	/**
 	* Gets the duration of the assigned animation
 	* @param Actor The contextual actor to fetch the animation id from if needed
 	* @returns The animation duration
 	*/
 	float GetAnimationDuration(const AActor* Actor = nullptr) const;
+
+	/** Imports data from a given animation set */
+	inline void Import(const FFaceFXAnimComponentSet& Data)
+	{
+		SkelMeshComponentId = Data.SkelMeshComponentId;
+		Animation = Data.Animation;
+		AnimationId = Data.AnimationId;
+	}
 
 private:
 
@@ -122,7 +131,7 @@ class UFaceFXMatineeControl : public UInterpTrack
 
 private:
 
-	/** 
+	/**
 	* Gets the keyframe data for a given time on the track
 	* @param InTime The time we're currently at on the track
 	* @param OutResult The resulting track keys as a pair of track index and key

@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -18,9 +18,12 @@
   SOFTWARE.
 *******************************************************************************/
 
-#include "FaceFXEditor.h"
 #include "FaceFXStyle.h"
-#include "SlateStyle.h"
+#include "FaceFXEditor.h"
+#include "FaceFXEditorConfig.h"
+#include "Styling/SlateBrush.h"
+#include "Styling/SlateStyle.h"
+#include "Styling/SlateStyleRegistry.h"
 #include "ClassIconFinder.h"
 
 #define FACEFX_IMAGE_PLUGIN_BRUSH( RelativePath, ... ) FSlateImageBrush( FFaceFXStyle::GetResourcePath(RelativePath, ".png"), __VA_ARGS__ )
@@ -40,7 +43,7 @@ TSharedPtr<FSlateStyleSet> FFaceFXStyle::StyleSet;
 */
 FString FFaceFXStyle::GetResourcePath(const FString& RelativePath, const ANSICHAR* Extension)
 {
-	static FString ResourceDir = FPaths::EnginePluginsDir() / TEXT("Runtime/FaceFX/Resources");
+	static FString ResourceDir = UFaceFXEditorConfig::Get().GetFaceFXPluginFolder() / TEXT("Resources");
 	return (ResourceDir / RelativePath) + Extension;
 }
 
@@ -61,14 +64,13 @@ void FFaceFXStyle::Initialize()
 
     StyleSet->Set(s_BrushIdActor, new FACEFX_IMAGE_PLUGIN_BRUSH(TEXT("Icons/facefxactor"), Icon40));
     StyleSet->Set(s_BrushIdAnim, new FACEFX_IMAGE_PLUGIN_BRUSH(TEXT("Icons/facefxanim"), Icon40));
-	
+
 	const FVector2D Icon16(16.F, 16.F);
     StyleSet->Set(s_BrushIdSuccess, new FACEFX_IMAGE_PLUGIN_BRUSH(TEXT("Icons/facefxsuccess"), Icon16));
     StyleSet->Set(s_BrushIdWarn, new FACEFX_IMAGE_PLUGIN_BRUSH(TEXT("Icons/facefxwarning"), Icon16));
     StyleSet->Set(s_BrushIdError, new FACEFX_IMAGE_PLUGIN_BRUSH(TEXT("Icons/facefxerror"), Icon16));
 
 	FSlateStyleRegistry::RegisterSlateStyle(*StyleSet.Get());
-	FClassIconFinder::RegisterIconSource(StyleSet.Get());
 };
 
 #undef FACEFX_IMAGE_PLUGIN_BRUSH
@@ -79,7 +81,6 @@ void FFaceFXStyle::Shutdown()
 	if (StyleSet.IsValid())
 	{
 		FSlateStyleRegistry::UnRegisterSlateStyle(*StyleSet.Get());
-		FClassIconFinder::UnregisterIconSource(StyleSet.Get());
 		ensure(StyleSet.IsUnique());
 		StyleSet.Reset();
 	}

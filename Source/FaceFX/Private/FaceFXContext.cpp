@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -18,8 +18,8 @@
   SOFTWARE.
 *******************************************************************************/
 
-#include "FaceFX.h"
 #include "FaceFXContext.h"
+#include "FaceFX.h"
 
 ffx_context_t FFaceFXContext::CreateContext()
 {

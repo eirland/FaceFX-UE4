@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -17,26 +17,24 @@
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   SOFTWARE.
 *******************************************************************************/
-
+#include "AssetTypeActions_FaceFXAnim.h"
 #include "FaceFXEditor.h"
 #include "FaceFX.h"
-#include "AssetTypeActions_FaceFXAnim.h"
-
-#include "UnrealEd.h"
-#include "IMainFrameModule.h"
-#include "ModuleManager.h"
+#include "Interfaces/IMainFrameModule.h"
+#include "Modules/ModuleManager.h"
+#include "Framework/MultiBox/MultiBoxBuilder.h"
 #include "IContentBrowserSingleton.h"
 #include "ContentBrowserModule.h"
 
 #define LOCTEXT_NAMESPACE "FaceFX"
 
-FText FAssetTypeActions_FaceFXAnim::GetName() const 
-{ 
-	return LOCTEXT("AssetTypeActions_FaceFXAnim", "FaceFX Anim"); 
+FText FAssetTypeActions_FaceFXAnim::GetName() const
+{
+	return LOCTEXT("AssetTypeActions_FaceFXAnim", "FaceFX Anim");
 }
 
-UClass* FAssetTypeActions_FaceFXAnim::GetSupportedClass() const 
-{ 
+UClass* FAssetTypeActions_FaceFXAnim::GetSupportedClass() const
+{
 	return UFaceFXAnim::StaticClass();
 }
 

@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -20,16 +20,16 @@
 
 #pragma once
 
-#include "Engine.h"
-#include "SlateBasics.h"
+#include "Widgets/SCompoundWidget.h"
+#include "Widgets/Input/SComboBox.h"
 
 /** A widget that shows a drop down selection box of different strings the user can select from */
 class FFaceFXComboChoiceWidget : public SCompoundWidget
 {
 public:
 	SLATE_BEGIN_ARGS(FFaceFXComboChoiceWidget)	{}
-	SLATE_ATTRIBUTE(FText, Message)	
-	SLATE_ATTRIBUTE(TArray<FString>, Options)	
+	SLATE_ATTRIBUTE(FText, Message)
+	SLATE_ATTRIBUTE(TArray<FString>, Options)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& Args);

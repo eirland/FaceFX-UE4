@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -21,6 +21,8 @@
 #pragma once
 
 #include "FaceFXData.h"
+#include "FaceFXEditor.h"
+#include "Misc/Paths.h"
 
 #include "FaceFXEditorTools.generated.h"
 
@@ -42,15 +44,15 @@ struct FFaceFXImportActionResult
 	{
 		Success,
 		Warning,
-		Error,		
+		Error,
 	};
 
 	FFaceFXImportActionResult() : Type(ActionType::None), Result(ResultType::Error) {}
-	FFaceFXImportActionResult(ActionType InType, ResultType InResult, const TAssetPtr<class UFaceFXAsset>& InImportAsset = nullptr, const FText& InMessage = FText::GetEmpty()) : 
+	FFaceFXImportActionResult(ActionType InType, ResultType InResult, const TSoftObjectPtr<class UFaceFXAsset>& InImportAsset = nullptr, const FText& InMessage = FText::GetEmpty()) :
 		Type(InType), Result(InResult), Message(InMessage), ImportAsset(InImportAsset) {}
 
-	/** 
-	* Rolls this action back 
+	/**
+	* Rolls this action back
 	* @returns True if successfully rolled back, else false
 	*/
 	bool Rollback();
@@ -86,7 +88,7 @@ struct FFaceFXImportActionResult
 	* Gets the assigned asset
 	* @returns The asset
 	*/
-	inline const TAssetPtr<UObject>& GetAsset() const
+	inline const TSoftObjectPtr<UObject>& GetAsset() const
 	{
 		return Asset;
 	}
@@ -95,7 +97,7 @@ struct FFaceFXImportActionResult
 	* Sets the assigned asset
 	* @param InAsset The new asset
 	*/
-	inline void SetAsset(const TAssetPtr<UObject>& InAsset)
+	inline void SetAsset(const TSoftObjectPtr<UObject>& InAsset)
 	{
 		Asset = InAsset;
 	}
@@ -105,7 +107,7 @@ struct FFaceFXImportActionResult
 	* Gets the assigned import asset
 	* @returns The import asset
 	*/
-	inline const TAssetPtr<UFaceFXAsset>& GetImportAsset() const
+	inline const TSoftObjectPtr<UFaceFXAsset>& GetImportAsset() const
 	{
 		return ImportAsset;
 	}
@@ -131,10 +133,10 @@ private:
 	FText Message;
 
 	/** The affected asset */
-	TAssetPtr<UObject> Asset;
+	TSoftObjectPtr<UObject> Asset;
 
 	/** The asset for which the action was performed */
-	TAssetPtr<class UFaceFXAsset> ImportAsset;
+	TSoftObjectPtr<class UFaceFXAsset> ImportAsset;
 };
 
 /** A whole result set for a complete import process */
@@ -143,7 +145,7 @@ struct FFaceFXImportResult
 {
 	GENERATED_USTRUCT_BODY()
 
-	FFaceFXImportResult(const TAssetPtr<class UFaceFXAsset>& InImportRootAsset = nullptr) : ImportRootAsset(InImportRootAsset) {}
+	FFaceFXImportResult(const TSoftObjectPtr<class UFaceFXAsset>& InImportRootAsset = nullptr) : ImportRootAsset(InImportRootAsset) {}
 
 	/**
 	* Adds a new message to the result set
@@ -155,10 +157,10 @@ struct FFaceFXImportResult
 	* @returns The added result entry
 	*/
 	template <typename TAssetType = UObject>
-	FFaceFXImportActionResult& Add(const FText& Message, FFaceFXImportActionResult::ActionType Type, FFaceFXImportActionResult::ResultType Result, const TAssetPtr<class UFaceFXAsset>& ImportAsset, const TAssetPtr<TAssetType>& InAsset = nullptr)
+	FFaceFXImportActionResult& Add(const FText& Message, FFaceFXImportActionResult::ActionType Type, FFaceFXImportActionResult::ResultType Result, const TSoftObjectPtr<class UFaceFXAsset>& ImportAsset, const TSoftObjectPtr<TAssetType>& InAsset = nullptr)
 	{
 		FFaceFXImportActionResult NewEntry = FFaceFXImportActionResult(Type, Result, ImportAsset, Message);
-		NewEntry.Asset = InAsset.ToStringReference();
+		NewEntry.Asset = InAsset.ToSoftObjectPath();
 		return Entries[Entries.Add(NewEntry)];
 	}
 
@@ -170,7 +172,7 @@ struct FFaceFXImportResult
 	* @returns The added result entry
 	*/
 	template <typename TAssetType = UObject>
-	FFaceFXImportActionResult& AddModifyError(const FText& Message, const TAssetPtr<class UFaceFXAsset>& ImportAsset = nullptr, const TAssetPtr<TAssetType>& InAsset = nullptr)
+	FFaceFXImportActionResult& AddModifyError(const FText& Message, const TSoftObjectPtr<class UFaceFXAsset>& ImportAsset = nullptr, const TSoftObjectPtr<TAssetType>& InAsset = nullptr)
 	{
 		return Add(Message, FFaceFXImportActionResult::ActionType::Modify, FFaceFXImportActionResult::ResultType::Error, ImportAsset, InAsset);
 	}
@@ -183,7 +185,7 @@ struct FFaceFXImportResult
 	* @returns The added result entry
 	*/
 	template <typename TAssetType = UObject>
-	FFaceFXImportActionResult& AddCreateError(const FText& Message, const TAssetPtr<class UFaceFXAsset>& ImportAsset = nullptr, const TAssetPtr<TAssetType>& InAsset = nullptr)
+	FFaceFXImportActionResult& AddCreateError(const FText& Message, const TSoftObjectPtr<class UFaceFXAsset>& ImportAsset = nullptr, const TSoftObjectPtr<TAssetType>& InAsset = nullptr)
 	{
 		return Add(Message, FFaceFXImportActionResult::ActionType::Create, FFaceFXImportActionResult::ResultType::Error, ImportAsset, InAsset);
 	}
@@ -196,7 +198,7 @@ struct FFaceFXImportResult
 	* @returns The added result entry
 	*/
 	template <typename TAssetType = UObject>
-	FFaceFXImportActionResult& AddModifyWarning(const FText& Message, const TAssetPtr<class UFaceFXAsset>& ImportAsset = nullptr, const TAssetPtr<TAssetType>& InAsset = nullptr)
+	FFaceFXImportActionResult& AddModifyWarning(const FText& Message, const TSoftObjectPtr<class UFaceFXAsset>& ImportAsset = nullptr, const TSoftObjectPtr<TAssetType>& InAsset = nullptr)
 	{
 		return Add(Message, FFaceFXImportActionResult::ActionType::Modify, FFaceFXImportActionResult::ResultType::Warning, ImportAsset, InAsset);
 	}
@@ -209,7 +211,7 @@ struct FFaceFXImportResult
 	* @returns The added result entry
 	*/
 	template <typename TAssetType = UObject>
-	FFaceFXImportActionResult& AddCreateWarning(const FText& Message, const TAssetPtr<class UFaceFXAsset>& ImportAsset = nullptr, const TAssetPtr<TAssetType>& InAsset = nullptr)
+	FFaceFXImportActionResult& AddCreateWarning(const FText& Message, const TSoftObjectPtr<class UFaceFXAsset>& ImportAsset = nullptr, const TSoftObjectPtr<TAssetType>& InAsset = nullptr)
 	{
 		return Add(Message, FFaceFXImportActionResult::ActionType::Create, FFaceFXImportActionResult::ResultType::Warning, ImportAsset, InAsset);
 	}
@@ -222,7 +224,7 @@ struct FFaceFXImportResult
 	* @returns The added result entry
 	*/
 	template <typename TAssetType = UObject>
-	FFaceFXImportActionResult& AddModifySuccess(const FText& Message, const TAssetPtr<class UFaceFXAsset>& ImportAsset = nullptr, const TAssetPtr<TAssetType>& InAsset = nullptr)
+	FFaceFXImportActionResult& AddModifySuccess(const FText& Message, const TSoftObjectPtr<class UFaceFXAsset>& ImportAsset = nullptr, const TSoftObjectPtr<TAssetType>& InAsset = nullptr)
 	{
 		return Add(Message, FFaceFXImportActionResult::ActionType::Modify, FFaceFXImportActionResult::ResultType::Success, ImportAsset, InAsset);
 	}
@@ -235,11 +237,11 @@ struct FFaceFXImportResult
 	* @returns The added result entry
 	*/
 	template <typename TAssetType = UObject>
-	FFaceFXImportActionResult& AddCreateSuccess(const FText& Message, const TAssetPtr<class UFaceFXAsset>& ImportAsset = nullptr, const TAssetPtr<TAssetType>& InAsset = nullptr)
+	FFaceFXImportActionResult& AddCreateSuccess(const FText& Message, const TSoftObjectPtr<class UFaceFXAsset>& ImportAsset = nullptr, const TSoftObjectPtr<TAssetType>& InAsset = nullptr)
 	{
 		return Add(Message, FFaceFXImportActionResult::ActionType::Create, FFaceFXImportActionResult::ResultType::Success, ImportAsset, InAsset);
 	}
-	
+
 	/**
 	* Gets the entries
 	* @returns The entries
@@ -253,7 +255,7 @@ struct FFaceFXImportResult
 	* Gets the import root asset
 	* @returns The root asset
 	*/
-	inline const TAssetPtr<class UFaceFXAsset>& GetImportRootAsset() const
+	inline const TSoftObjectPtr<class UFaceFXAsset>& GetImportRootAsset() const
 	{
 		return ImportRootAsset;
 	}
@@ -280,7 +282,7 @@ struct FFaceFXImportResult
 		return Result;
 	}
 
-	FORCEINLINE bool operator==(const TAssetPtr<class UFaceFXAsset>& Asset) const
+	FORCEINLINE bool operator==(const TSoftObjectPtr<class UFaceFXAsset>& Asset) const
 	{
 		return ImportRootAsset == Asset;
 	}
@@ -291,7 +293,7 @@ private:
 	TArray<FFaceFXImportActionResult> Entries;
 
 	/** The root action that initially requested the import */
-	TAssetPtr<class UFaceFXAsset> ImportRootAsset;
+	TSoftObjectPtr<class UFaceFXAsset> ImportRootAsset;
 };
 
 /** A list of multiple import results per asset */
@@ -302,7 +304,7 @@ struct FFaceFXImportResultSet
 	* @param Asset The current root asset
 	* @returns The new or existing entry
 	*/
-	inline FFaceFXImportResult& GetOrAdd(const TAssetPtr<class UFaceFXAsset>& Asset)
+	inline FFaceFXImportResult& GetOrAdd(const TSoftObjectPtr<class UFaceFXAsset>& Asset)
 	{
 		if(FFaceFXImportResult* Entry = Entries.FindByKey(Asset))
 		{
@@ -311,12 +313,12 @@ struct FFaceFXImportResultSet
 		return Entries[Entries.Add(FFaceFXImportResult(Asset))];
 	}
 
-	inline const FFaceFXImportResult* GetResult(const TAssetPtr<class UFaceFXAsset>& Asset) const
+	inline const FFaceFXImportResult* GetResult(const TSoftObjectPtr<class UFaceFXAsset>& Asset) const
 	{
 		return Entries.FindByKey(Asset);
 	}
 
-	/** 
+	/**
 	* Gets all entries
 	* @returns The entries
 	*/
@@ -325,7 +327,7 @@ struct FFaceFXImportResultSet
 		return Entries;
 	}
 
-	/** 
+	/**
 	* Gets the indicator if this result set contains at least one error
 	* @returns True if one or more error are inside this result set. Else false
 	*/
@@ -386,6 +388,9 @@ private:
 	UObject* Obj;
 };
 
+/** The callback for when assets get imported and we want to do something before the compiled data gets deleted */
+DECLARE_DELEGATE_FourParams(FCompilationBeforeDeletionDelegate, UObject* /** Asset */, const FString& /* CompilationFolder */, bool /** ImportResult */, FFaceFXImportResult& /** ResultMessages */);
+
 /** Editor specific FaceFX functions */
 struct FACEFXEDITOR_API FFaceFXEditorTools
 {
@@ -393,50 +398,10 @@ struct FACEFXEDITOR_API FFaceFXEditorTools
 	static uint32 AssetCategory;
 
 	/**
-	* Gets the path to the FaceFX Studio installation. Configurable via engine ini file (section "ThirdParty.FaceFX", property "StudioPathAbsolute")
-	* @returns The path to the installation
-	*/
-	static const FString& GetFaceFXStudioPath();
-
-	/**
-	* Gets the indicator if the import shall search through all existing USoundWave assets and look for an asset that was generated with the linked sound source file per FaceFX Animation. 
-	* @returns True if enabled, else false
-	*/
-	static bool IsImportLookupAudio();
-
-	/**
-	* Gets the indicator if the import shall search through all existing UFaceFXAnimation assets and look for an asset that was generated with the linked .ffxanim source file. 
-	* @returns True if enabled, else false
-	*/
-	static bool IsImportLookupAnimation();
-
-	/**
-	* Gets the indicator if the audio data (.wav files only) shall be automatically imported during the FaceFX Animation import process
-	* @returns True if enabled, else false
-	*/
-	static bool IsImportAudio();
-
-	/**
-	* Gets the indicator if animations shall be imported during FaceFX actor import
-	* @returns True if enabled, else false
-	*/
-	static bool IsImportAnimationOnActorImport();
-
-	/**
-	* Gets the indicator if the editor shall show a warning toaster message when an UFaceFXAnimation is tried to get played on an 
-	* UFaceFXCharacter which FaceFX actor handle is incompatible with that animation
-	* @returns True if enabled, else false
-	*/
-	static bool IsShowToasterMessageOnIncompatibleAnim();
-
-	/**
 	* Checks if FaceFX studio is installed within the standard installation path
 	* @returns True if installed, else false
 	*/
-	static inline bool IsFaceFXStudioInstalled()
-	{
-		return FPaths::FileExists(GetFaceFXStudioPath());
-	}
+	static bool IsFaceFXStudioInstalled();
 
 	/**
 	* Opens the given FaceFX asset within FaceFX studio in case this is installed locally
@@ -466,19 +431,6 @@ struct FACEFXEDITOR_API FFaceFXEditorTools
 	static bool ImportFaceFXAsset(class UFaceFXAsset* Asset, const FString& AssetPath, FFaceFXImportResult& OutResultMessages, const FCompilationBeforeDeletionDelegate& BeforeDeletionCallback = FCompilationBeforeDeletionDelegate());
 
 	/**
-	* Gets all animation groups found within a given FaceFX compilation folder and platform specific sub folder
-	* @param Folder The compilation folder to load from
-	* @param Platform The target platform to use the sub folder from
-	* @param OutGroups The optional resulting animation groups
-	* @param OutAnimGroupIds The optional <group.animation> id list
-	* @returns True if at least one group exist that contains .ffxanim files, else false
-	*/
-	inline static bool GetAnimationGroupsInFolder(const FString& Folder, EFaceFXTargetPlatform::Type Platform, TArray<FString>* OutGroups = nullptr, TArray<FString>* OutAnimGroupIds = nullptr)
-	{
-		return GetAnimationGroupsInFolder(GetPlatformFolder(Folder, Platform), OutGroups, OutAnimGroupIds);
-	}
-
-	/**
 	* Gets all animation groups found within a given FaceFX compilation folder
 	* @param Folder The compilation folder to load from
 	* @param OutGroups The optional resulting animation groups
@@ -486,28 +438,6 @@ struct FACEFXEDITOR_API FFaceFXEditorTools
 	* @returns True if at least one group exist that contains .ffxanim files, else false
 	*/
 	static bool GetAnimationGroupsInFolder(const FString& Folder, TArray<FString>* OutGroups = nullptr, TArray<FString>* OutAnimGroupIds = nullptr);
-
-	/**
-	* Gets the compilation sub folder for a given base folder and target platform
-	* @param Folder The base folder to generate the target folder for
-	* @param Platform The target platform
-	* @returns The target folder
-	*/
-	static inline FString GetPlatformFolder(const FString& Folder, EFaceFXTargetPlatform::Type Platform)
-	{
-		switch(Platform)
-		{
-		case EFaceFXTargetPlatform::PC: return Folder / TEXT("x86");
-#if FACEFX_SUPPORT_PS4
-		case EFaceFXTargetPlatform::PS4: return Folder / TEXT("ps4");
-#endif //FACEFX_SUPPORT_PS4
-#if FACEFX_SUPPORT_XBONE
-		case EFaceFXTargetPlatform::XBoxOne: return Folder / TEXT("xboxone");
-#endif //FACEFX_SUPPORT_XBONE
-		default: checkf(false, TEXT("Unknown target platform type"));
-		}
-		return TEXT("");
-	}
 
 	/**
 	* Gets the FaceFX studio output folder for a given .facefx file
@@ -555,7 +485,7 @@ struct FACEFXEDITOR_API FFaceFXEditorTools
 	*/
 	static void SavePackage(UPackage* Package, bool addToSc = true);
 
-	/** 
+	/**
 	* Reloads the data from from a facefx compilation folder. Doesn't change asset name and folder
 	* @param Asset The target asset
 	* @param Folder The path to the platform folder to load the compiled assets from
@@ -564,7 +494,7 @@ struct FACEFXEDITOR_API FFaceFXEditorTools
 	*/
 	static bool LoadFromCompilationFolder(class UFaceFXAsset* Asset, const FString& Folder, FFaceFXImportResult& OutResultMessages);
 
-	/** 
+	/**
 	* Reloads the data from from a facefx compilation folder. Doesn't change asset name and folder
 	* @param Asset The target asset
 	* @param Folder The path to the platform folder to load the compiled assets from
@@ -573,7 +503,7 @@ struct FACEFXEDITOR_API FFaceFXEditorTools
 	*/
 	static bool LoadFromCompilationFolder(class UFaceFXActor* Asset, const FString& Folder, FFaceFXImportResult& OutResultMessages);
 
-	/** 
+	/**
 	* Reloads the data from from a facefx compilation folder. Doesn't change asset name and folder
 	* @param Asset The target asset
 	* @param Folder The path to the folder to load the compiled assets from
@@ -582,7 +512,7 @@ struct FACEFXEDITOR_API FFaceFXEditorTools
 	*/
 	static bool LoadFromCompilationFolder(class UFaceFXAnim* Asset, const FString& Folder, FFaceFXImportResult& OutResultMessages);
 
-	/** 
+	/**
 	* Initializes the asset from a .facefx asset file
 	* @param Asset The target asset
 	* @param File The path to the .facefx asset file
@@ -596,22 +526,22 @@ struct FACEFXEDITOR_API FFaceFXEditorTools
 	/**
 	* Sets the focus on a given asset within the content browser
 	* @param Asset The asset to focus
-	*/	
-	static void ContentBrowserFocusAsset(const FStringAssetReference& Asset);
+	*/
+	static void ContentBrowserFocusAsset(const FSoftObjectPath& Asset);
 
-	/** 
+	/**
 	* Deletes the gives asset
 	* @param Asset The asset to delete
 	*/
 	static void DeleteAsset(UObject* Asset);
 
-	/** 
+	/**
 	* Shows a slate error message
 	* @param msg The error message to show
 	*/
 	static void ShowError(const FText& Msg);
 
-	/** 
+	/**
 	* Shows a slate info message
 	* @param msg The info message to show
 	*/
@@ -621,7 +551,7 @@ private:
 
 	FFaceFXEditorTools(){}
 
-	/** 
+	/**
 	* Reloads the data from from a facefx compilation folder. Doesn't change asset name and folder. Assigns a new group before doing so
 	* @param Asset The target asset
 	* @param Group The group to use when loading the animation
@@ -632,14 +562,14 @@ private:
 	*/
 	static bool LoadFromCompilationFolder(class UFaceFXAnim* Asset, const FName& Group, const FName& Animation, const FString& Folder, FFaceFXImportResult& OutResultMessages);
 
-    /**
-    * Loads all actor data from a given folder into the given asset
-    * @param Asset The target asset
-    * @param Folder The path to the folder to load the compiled data from
-    * @param OutResultMessages The result set
-    * @returns True if succeeded, else false
-    */
-    static bool LoadCompiledPlatformActorData(UFaceFXActor* Asset, const FString& Folder, FFaceFXImportResult& OutResultMessages);
+	/**
+	* Loads all actor data from a given folder into the given asset
+	* @param Asset The target asset
+	* @param Folder The path to the folder to load the compiled data from
+	* @param OutResultMessages The result set
+	* @returns True if succeeded, else false
+	*/
+	static bool LoadCompiledActorData(UFaceFXActor* Asset, const FString& Folder, FFaceFXImportResult& OutResultMessages);
 
 	/**
 	* Loads the audio file that is mapped to the given asset within the audio map file in the given folder and links to it. Creates a new USound asset if needed
@@ -653,7 +583,7 @@ private:
 	/**
 	* Locates the USoundWave asset that was generated out of the given audio source file
 	* @param AudioSourceFile The absolute source file path to the audio file
-	* @returns The asset that was generated using that audio source or unassigned TAssetPtr if not found
+	* @returns The asset that was generated using that audio source or unassigned TSoftObjectPtr if not found
 	*/
-	static TAssetPtr<class USoundWave> LocateAudio(const FString& AudioSourceFile);
+	static TSoftObjectPtr<class USoundWave> LocateAudio(const FString& AudioSourceFile);
 };

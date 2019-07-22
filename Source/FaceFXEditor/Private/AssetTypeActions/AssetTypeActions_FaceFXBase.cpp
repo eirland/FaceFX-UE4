@@ -1,6 +1,6 @@
 /*******************************************************************************
   The MIT License (MIT)
-  Copyright (c) 2015 OC3 Entertainment, Inc.
+  Copyright (c) 2015-2019 OC3 Entertainment, Inc. All rights reserved.
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -18,24 +18,26 @@
   SOFTWARE.
 *******************************************************************************/
 
+#include "AssetTypeActions_FaceFXBase.h"
 #include "FaceFXEditor.h"
 #include "FaceFXEditorTools.h"
 #include "FaceFX.h"
-#include "AssetTypeActions_FaceFXBase.h"
-#include "Factories/FaceFxActorFactory.h"
+#include "Factories/FaceFXActorFactory.h"
 #include "Include/Slate/FaceFXResultWidget.h"
-
-#include "UnrealEd.h"
-#include "MainFrame.h"
-#include "ModuleManager.h"
+#include "FaceFXEditorConfig.h"
+#include "Interfaces/IMainFrameModule.h"
+#include "Modules/ModuleManager.h"
 #include "DesktopPlatformModule.h"
 #include "ContentBrowserModule.h"
+#include "Dialogs/Dialogs.h"
+#include "Editor.h"
+#include "Misc/FeedbackContext.h"
 
 #define LOCTEXT_NAMESPACE "FaceFX"
 
-uint32 FAssetTypeActions_FaceFXBase::GetCategories() 
-{ 
-	return FFaceFXEditorTools::AssetCategory; 
+uint32 FAssetTypeActions_FaceFXBase::GetCategories()
+{
+	return FFaceFXEditorTools::AssetCategory;
 }
 
 /** Determine if we can recompile assets */
@@ -107,13 +109,13 @@ void FAssetTypeActions_FaceFXBase::ExecuteSetSource(TArray<TWeakObjectPtr<UObjec
 		{
 			//remove previous animation id in case of an UFaceFXAnim so the init phase will ask the user for an animation of the new source
 			FaceFXAnim->GetId().Reset();
-		}		
+		}
 
 		//assign new file and reimport
 		FFaceFXImportResultSet ResultSet;
-        
+
         FCompilationBeforeDeletionDelegate DeletionDelegate;
-        if(FaceFXAsset->IsA(UFaceFXActor::StaticClass()) && FFaceFXEditorTools::IsImportAnimationOnActorImport())
+        if(FaceFXAsset->IsA(UFaceFXActor::StaticClass()) && UFaceFXEditorConfig::Get().IsImportAnimationOnActorImport())
         {
             //actor assets may lead to changed animation sets
             DeletionDelegate = FCompilationBeforeDeletionDelegate::CreateStatic(&UFaceFXActorFactory::OnFxActorCompilationBeforeDelete);
@@ -146,9 +148,9 @@ void FAssetTypeActions_FaceFXBase::ExecuteReimport(TArray<TWeakObjectPtr<UObject
 		if(UFaceFXAsset* FaceFXAsset = Cast<UFaceFXAsset>(Object.Get()))
 		{
 			FFaceFXImportResult& Result = ResultSet.GetOrAdd(FaceFXAsset);
-			
+
 			FCompilationBeforeDeletionDelegate DeletionDelegate;
-			if(FaceFXAsset->IsA(UFaceFXActor::StaticClass()) && FFaceFXEditorTools::IsImportAnimationOnActorImport())
+			if(FaceFXAsset->IsA(UFaceFXActor::StaticClass()) && UFaceFXEditorConfig::Get().IsImportAnimationOnActorImport())
 			{
 				//actor assets may lead to changed animation sets
 				DeletionDelegate = FCompilationBeforeDeletionDelegate::CreateRaw(this, &FAssetTypeActions_FaceFXBase::OnReimportBeforeDelete);
@@ -225,7 +227,7 @@ void FAssetTypeActions_FaceFXBase::ExecuteOpenFolder(TArray<TWeakObjectPtr<UObje
 				}
 				else
 				{
-					Errors += FString::Printf(*LOCTEXT("OpenFolderMissing", "Asset does not exist: %s\n").ToString(), *PathAbs);
+					Errors += FText::Format(LOCTEXT("OpenFolderMissing", "Asset does not exist: {0}"), FText::FromString(PathAbs)).ToString();
 				}
 			}
 		}
